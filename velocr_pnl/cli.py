@@ -14,7 +14,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 def main() -> None:
     load_dotenv(_PROJECT_ROOT / ".env", encoding="utf-8-sig")
     load_dotenv(encoding="utf-8-sig")
-    p = argparse.ArgumentParser(description="Velocr PNL (Moralis)")
+    p = argparse.ArgumentParser(description="Velcor PNL (Moralis)")
     p.add_argument("wallet", help="0x… EVM address")
     p.add_argument("--chain", default="eth", help="eth | polygon | base | arbitrum | optimism")
     p.add_argument(

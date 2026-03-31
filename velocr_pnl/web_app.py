@@ -1,5 +1,5 @@
 """
-Velocr web dashboard: NFT trades on EVM (Ethereum-first), Moralis-backed.
+Velcor web dashboard: NFT trades on EVM (Ethereum-first), Moralis-backed.
 Run: `uvicorn velocr_pnl.web_app:app --reload --host 127.0.0.1 --port 8080`
 """
 from pathlib import Path
@@ -32,7 +32,7 @@ STATIC = WEB_ROOT / "static"
 # Avoid stale branding/HTML when `web/index.html` changes (browser disk cache).
 _HTML_NO_CACHE = {"Cache-Control": "no-store, max-age=0, must-revalidate"}
 
-app = FastAPI(title="Velocr NFT Monitor", version="0.1.0")
+app = FastAPI(title="Velcor NFT Monitor", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -50,7 +50,7 @@ async def favicon() -> Response:
 
 @app.get("/api/health")
 async def health() -> dict:
-    return {"ok": True, "service": "velocr-nft"}
+    return {"ok": True, "service": "velcor-nft"}
 
 
 _IMG_PROXY_MAX_BYTES = 2_500_000
@@ -106,7 +106,7 @@ async def img_proxy(url: str = Query(..., min_length=12, max_length=4096)) -> Re
     if not _allowed_image_proxy_url(raw):
         raise HTTPException(status_code=400, detail="Image URL not allowed.")
     headers = {
-        "User-Agent": "VelocrDashboard/1.0 (image-proxy)",
+        "User-Agent": "VelcorDashboard/1.0 (image-proxy)",
         "Accept": "image/avif,image/webp,image/*,*/*;q=0.8",
     }
     timeout = aiohttp.ClientTimeout(total=15)

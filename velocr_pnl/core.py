@@ -1,5 +1,5 @@
 """
-Velocr PNL — Moralis-only (`MORALIS_API_KEY`).
+Velcor PNL — Moralis-only (`MORALIS_API_KEY`).
 
 - `GET …/wallets/{address}/nfts/trades` — marketplace buys/sells
 - `GET …/{address}/nft/transfers` — NFT transfers; **mints** = from `0x0` → wallet

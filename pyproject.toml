@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "velocr-pnl"
 version = "0.1.0"
-description = "Velocr NFT PnL — Moralis marketplace trades + mint detection"
+description = "Velcor NFT PnL — Moralis marketplace trades + mint detection"
 requires-python = ">=3.10"
 dependencies = [
     "aiohttp>=3.9.0",
