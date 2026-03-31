@@ -1377,8 +1377,15 @@ main {
   color: var(--text);
   font-family: var(--font);
   font-size: 0.88rem;
+  color-scheme: dark;
   backdrop-filter: blur(12px);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+.kol-filters-row select option,
+.search-row select option {
+  background: #0b0a14;
+  color: var(--text);
 }
 
 .kol-filters-row select:focus {

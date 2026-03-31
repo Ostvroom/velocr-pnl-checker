@@ -1,4 +1,4 @@
-# NFT PNL Checker (Velcor)
+# NFT PNL Checker
 
 FastAPI dashboard for estimating NFT trading PnL on EVM chains (Moralis-backed).
 
