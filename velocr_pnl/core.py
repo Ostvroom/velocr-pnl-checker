@@ -35,6 +35,9 @@ MORALIS_NFT_TRANSFERS_URL = "https://deep-index.moralis.io/api/v2.2/{address}/nf
 MORALIS_NFT_CONTRACT_METADATA_URL = "https://deep-index.moralis.io/api/v2.2/nft/{address}/metadata"
 MORALIS_NFT_TOKEN_URL = "https://deep-index.moralis.io/api/v2.2/nft/{address}/{token_id}"
 MORALIS_WALLET_NFTS_URL = "https://deep-index.moralis.io/api/v2.2/{address}/nft"
+MORALIS_RESOLVE_REVERSE_URL = "https://deep-index.moralis.io/api/v2.2/resolve/{address}/reverse"
+
+OPENSEA_ACCOUNT_URL = "https://api.opensea.io/api/v2/accounts/{address_or_username}"
 
 ZERO_ADDR = "0x0000000000000000000000000000000000000000"
 
@@ -72,6 +75,88 @@ _dashboard_bundle_lock = asyncio.Lock()
 
 def _truthy_env(name: str) -> bool:
     return (os.getenv(name) or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _opensea_key() -> Optional[str]:
+    k = (os.getenv("OPENSEA_API_KEY") or "").strip()
+    return k or None
+
+
+async def _fetch_moralis_wallet_name(
+    session: aiohttp.ClientSession,
+    wallet_address: str,
+    api_key: str,
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Use Moralis Resolve API to reverse-resolve a wallet to a human name.
+    Today this is primarily ENS (on Ethereum) and may be empty for most wallets.
+    """
+    url = MORALIS_RESOLVE_REVERSE_URL.format(address=quote(wallet_address))
+    headers = {"X-API-Key": api_key, "Accept": "application/json"}
+    try:
+        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=20)) as r:
+            text = await r.text()
+            if r.status == 401:
+                return None, _moralis_error_message(401, text)
+            if r.status == 429:
+                return None, _moralis_error_message(429, text)
+            if r.status >= 400:
+                return None, _moralis_error_message(r.status, text)
+            try:
+                data = json.loads(text)
+            except json.JSONDecodeError:
+                return None, "Moralis returned non-JSON."
+    except Exception:
+        return None, "Moralis resolve request failed."
+
+    if not isinstance(data, dict):
+        return None, None
+    nm = data.get("name") or data.get("domain") or data.get("ens") or ""
+    name = nm.strip() if isinstance(nm, str) else ""
+    return (name if name else None), None
+
+
+async def _fetch_opensea_wallet_name(
+    session: aiohttp.ClientSession,
+    wallet_address: str,
+    api_key: str,
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Fetch OpenSea account profile (v2) to get `username` for an address.
+    Requires OPENSEA_API_KEY; failures are non-fatal.
+    """
+    url = OPENSEA_ACCOUNT_URL.format(address_or_username=quote(wallet_address))
+    headers = {
+        "X-API-KEY": api_key,
+        "Accept": "application/json",
+        "User-Agent": "VelcorDashboard/1.0 (opensea-account)",
+    }
+    try:
+        async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=20)) as r:
+            text = await r.text()
+            if r.status == 401 or r.status == 403:
+                return None, "OpenSea unauthorized (check OPENSEA_API_KEY)."
+            if r.status == 429:
+                return None, "OpenSea rate limited."
+            if r.status >= 400:
+                return None, f"OpenSea error {r.status}."
+            try:
+                data = json.loads(text)
+            except json.JSONDecodeError:
+                return None, "OpenSea returned non-JSON."
+    except Exception:
+        return None, "OpenSea request failed."
+
+    if not isinstance(data, dict):
+        return None, None
+    # Docs: AccountResponse contains `username`; be defensive to schema drift.
+    u = data.get("username")
+    if not u and isinstance(data.get("account"), dict):
+        u = data["account"].get("username")
+    if not u and isinstance(data.get("data"), dict):
+        u = data["data"].get("username")
+    name = str(u).strip() if isinstance(u, (str, int, float)) else ""
+    return (name if name else None), None
 
 
 def _env_int(name: str, default: int, vmin: int, vmax: int) -> int:
@@ -1018,6 +1103,7 @@ async def _finalize_pnl_payload(
     chain_name: str,
     symbol: str,
     wl: str,
+    wallet_name: Optional[str],
     trades: List[dict],
     xfers: List[dict],
     hit_trade_cap: bool,
@@ -1098,6 +1184,7 @@ async def _finalize_pnl_payload(
     return {
         "mode": "moralis_trades",
         "wallet": wallet_address,
+        "wallet_name": wallet_name,
         "chain": chain_name,
         "symbol": symbol,
         "moralis_period_note": moralis_period_note,
@@ -1160,6 +1247,8 @@ async def get_wallet_pnl(
     unreal_pages = _env_int("VELOCR_UNREALIZED_NFT_PAGES", 3, 1, 20)
 
     skip_u = _truthy_env("VELOCR_SKIP_UNREALIZED")
+    skip_os = _truthy_env("VELOCR_SKIP_OPENSEA")
+    os_key = _opensea_key()
 
     async with aiohttp.ClientSession() as session:
         trade_coro = _fetch_moralis_wallet_trades(
@@ -1198,11 +1287,27 @@ async def get_wallet_pnl(
                 moralis_limit,
                 unreal_pages,
             )
-        (trades, hit_cap, api_err), (xfers, hit_xfer_cap, xfer_err), unreal_tuple = await asyncio.gather(
+
+        # Prefer Moralis resolve (ENS) name first; optional OpenSea fallback if provided.
+        name_coro = _fetch_moralis_wallet_name(session, wallet_address, key)
+        if os_key and not skip_os:
+            os_coro = _fetch_opensea_wallet_name(session, wallet_address, os_key)
+        else:
+
+            async def _no_os() -> Tuple[Optional[str], Optional[str]]:
+                await asyncio.sleep(0)
+                return None, "skipped"
+
+            os_coro = _no_os()
+
+        (trades, hit_cap, api_err), (xfers, hit_xfer_cap, xfer_err), unreal_tuple, (moralis_name, _m_name_err), (os_name, _os_err) = await asyncio.gather(
             trade_coro,
             xfer_coro,
             unreal_coro,
+            name_coro,
+            os_coro,
         )
+        wallet_name = moralis_name or os_name
     if api_err:
         return {"error": api_err}
 
@@ -1215,6 +1320,7 @@ async def get_wallet_pnl(
         chain_name=chain_name,
         symbol=symbol,
         wl=wl,
+        wallet_name=wallet_name,
         trades=trades,
         xfers=xfers,
         hit_trade_cap=hit_cap,
@@ -1292,6 +1398,8 @@ async def get_wallet_dashboard_bundle(
     key = _moralis_key()
     unreal_pages = _env_int("VELOCR_UNREALIZED_NFT_PAGES", 3, 1, 20)
     skip_u = _truthy_env("VELOCR_SKIP_UNREALIZED")
+    skip_os = _truthy_env("VELOCR_SKIP_OPENSEA")
+    os_key = _opensea_key()
     fetch_per_token = enrich_trade_images and not _truthy_env("VELOCR_SKIP_TRADE_NFT_ENRICH")
 
     async with aiohttp.ClientSession() as session:
@@ -1351,12 +1459,26 @@ async def get_wallet_dashboard_bundle(
                 nft_metadata=True,
             )
 
-        (trades, hit_cap, api_err), (xfers, hit_xfer_cap, xfer_err), unreal_tuple, (act_rows, act_hit, act_err) = await asyncio.gather(
+        name_coro = _fetch_moralis_wallet_name(session, wallet_address, key)
+        if os_key and not skip_os:
+            os_coro = _fetch_opensea_wallet_name(session, wallet_address, os_key)
+        else:
+
+            async def _no_os() -> Tuple[Optional[str], Optional[str]]:
+                await asyncio.sleep(0)
+                return None, "skipped"
+
+            os_coro = _no_os()
+
+        (trades, hit_cap, api_err), (xfers, hit_xfer_cap, xfer_err), unreal_tuple, (act_rows, act_hit, act_err), (moralis_name, _m_name_err), (os_name, _os_err) = await asyncio.gather(
             trade_coro,
             xfer_coro,
             unreal_coro,
             act_coro,
+            name_coro,
+            os_coro,
         )
+        wallet_name = moralis_name or os_name
 
         if api_err:
             return {"error": api_err}
@@ -1370,6 +1492,7 @@ async def get_wallet_dashboard_bundle(
             chain_name=chain_name,
             symbol=symbol,
             wl=wl,
+            wallet_name=wallet_name,
             trades=trades,
             xfers=xfers,
             hit_trade_cap=hit_cap,

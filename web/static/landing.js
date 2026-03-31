@@ -43,7 +43,9 @@ function renderActivity() {
       '<li class="kol-activity-empty">No searches yet. Enter a wallet above to open the dashboard.</li>';
     return;
   }
-  ul.innerHTML = items
+  // Avoid scrollbars on the landing page: show a small, fixed set.
+  const shown = items.slice(0, 6);
+  ul.innerHTML = shown
     .map((x) => {
       const net = Number(x.net_trades);
       const netStr = Number.isFinite(net)

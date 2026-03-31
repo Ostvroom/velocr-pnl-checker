@@ -15,8 +15,20 @@
     <div class="dash-loading-card">
       <div class="dash-loading-spinner" aria-hidden="true"></div>
       <div class="dash-loading-text">
+        <div class="intel-kicker intel-kicker--dash" aria-hidden="true">
+          <span class="intel-badge">DOSSIER</span>
+          <span class="intel-sep">•</span>
+          <span class="intel-clearance">CLEARANCE: LEVEL-4</span>
+          <span class="intel-sep">•</span>
+          <span class="intel-status">SCAN ACTIVE</span>
+        </div>
         <strong>Loading wallet</strong>
-        <span class="muted">Fetching trades, collections, and activity…</span>
+        <span class="muted">Building intelligence packet…</span>
+        <div class="dash-load-steps mono" aria-hidden="true">
+          <div class="dash-load-step"><span class="dash-load-tag">PING</span> marketplace rows</div>
+          <div class="dash-load-step"><span class="dash-load-tag">TRACE</span> transfers &amp; mints</div>
+          <div class="dash-load-step"><span class="dash-load-tag">INDEX</span> collections &amp; images</div>
+        </div>
       </div>
     </div>
     <div class="dash-skeleton">
@@ -43,6 +55,7 @@
     <div class="dash-wallet-block">
       <span class="dash-wallet-label">Wallet</span>
       <span class="dash-wallet" id="dash-wallet">—</span>
+      <span class="dash-wallet-name" id="dash-wallet-name" hidden>—</span>
       <span class="dash-chain-pill" id="dash-chain-pill">ETH</span>
     </div>
     <div class="dash-time-pills" id="dash-time-pills" role="tablist" aria-label="Time range">

@@ -418,6 +418,11 @@ async function loadAll() {
   }
 
   $("#dash-wallet").textContent = wallet;
+  const wn = $("#dash-wallet-name");
+  if (wn) {
+    wn.hidden = true;
+    wn.textContent = "";
+  }
   $("#dash-chain-pill").textContent = chain.toUpperCase();
   syncPillActive(days);
 
@@ -427,6 +432,16 @@ async function loadAll() {
       `/api/dashboard/${encodeURIComponent(wallet)}?${qc}&metadata=false&enrich_images=true`,
     );
     const pnl = dash.pnl;
+    if (wn) {
+      const name = pnl?.wallet_name;
+      if (typeof name === "string" && name.trim()) {
+        wn.textContent = name.trim();
+        wn.hidden = false;
+      } else {
+        wn.hidden = true;
+        wn.textContent = "";
+      }
+    }
     const tradesData = dash.trades;
     const activityData = dash.activity;
 
