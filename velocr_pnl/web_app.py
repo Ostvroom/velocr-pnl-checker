@@ -1,7 +1,8 @@
 """
-Velcor web dashboard: NFT trades on EVM (Ethereum-first), Moralis-backed.
+Velcor web dashboard: NFT trades on EVM (Ethereum-first), Alchemy-backed indexer.
 Run: `uvicorn velocr_pnl.web_app:app --reload --host 127.0.0.1 --port 8080`
 """
+import os
 from pathlib import Path
 from typing import Optional
 from urllib.parse import unquote, urlparse
@@ -17,8 +18,10 @@ load_dotenv(encoding="utf-8-sig")
 
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+from starlette.requests import Request
 
 from velocr_pnl.core import (
     get_wallet_dashboard_bundle,
@@ -26,6 +29,15 @@ from velocr_pnl.core import (
     get_wallet_pnl,
     get_wallet_recent_trades,
     get_watchlist_nft_feed,
+)
+from velocr_pnl.database import init_db as init_indexer_db
+from velocr_pnl.gate_auth import (
+    COOKIE_NAME,
+    gate_enabled,
+    init_db,
+    make_cookie_value,
+    verify_cookie_value,
+    verify_key_plain,
 )
 WEB_ROOT = ROOT / "web"
 STATIC = WEB_ROOT / "static"
@@ -42,6 +54,62 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.on_event("startup")
+async def _app_startup() -> None:
+    # Indexer DB (sync_state, transfers, sales) — required before /api/dashboard
+    init_indexer_db()
+    if gate_enabled():
+        init_db()
+
+
+@app.middleware("http")
+async def access_gate_middleware(request: Request, call_next):
+    if not gate_enabled():
+        return await call_next(request)
+
+    path = request.url.path
+    if (
+        path.startswith("/static/")
+        or path == "/favicon.ico"
+        or path == "/api/health"
+        or (path == "/api/auth/access" and request.method == "POST")
+    ):
+        return await call_next(request)
+
+    try:
+        cookie_ok = verify_cookie_value(request.cookies.get(COOKIE_NAME))
+    except RuntimeError:
+        return JSONResponse(
+            {
+                "detail": "Server misconfigured: set GATE_SECRET in .env when ACCESS_GATE_ENABLED=1.",
+            },
+            status_code=503,
+        )
+
+    if cookie_ok:
+        return await call_next(request)
+
+    gate_path = WEB_ROOT / "gate.html"
+    if request.method == "GET" and path in ("/", "/dashboard"):
+        if gate_path.is_file():
+            return FileResponse(gate_path, headers=dict(_HTML_NO_CACHE))
+        return JSONResponse(
+            {"detail": "Gate page missing: web/gate.html"},
+            status_code=500,
+        )
+
+    if path.startswith("/api/"):
+        return JSONResponse(
+            {"detail": "Unauthorized — clearance key required."},
+            status_code=401,
+        )
+
+    if gate_path.is_file():
+        return FileResponse(gate_path, headers=dict(_HTML_NO_CACHE))
+    return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+
+
 @app.get("/favicon.ico")
 async def favicon() -> Response:
     # Avoid 404 spam in logs; optionally add a real icon later.
@@ -50,10 +118,58 @@ async def favicon() -> Response:
 
 @app.get("/api/health")
 async def health() -> dict:
-    return {"ok": True, "service": "velcor-nft"}
+    """Liveness + whether Alchemy is configured (key present; not validated against Alchemy)."""
+    ak = (os.getenv("ALCHEMY_API_KEY") or "").strip()
+    sh = (os.getenv("SIMPLEHASH_API_KEY") or "").strip()
+    return {
+        "ok": True,
+        "service": "velcor-nft",
+        "data_backend": "alchemy_indexed",
+        "alchemy_configured": bool(ak),
+        "simplehash_fallback_configured": bool(sh and not ak),
+    }
 
 
-_IMG_PROXY_MAX_BYTES = 2_500_000
+class AccessKeyBody(BaseModel):
+    key: str = Field(..., min_length=4, max_length=256)
+
+
+@app.post("/api/auth/access")
+async def api_auth_access(body: AccessKeyBody) -> dict:
+    """
+    Validate clearance key from SQLite; set HTTP-only session cookie on success.
+    """
+    if not gate_enabled():
+        return {"ok": True, "gate": "disabled"}
+    try:
+        kid = verify_key_plain(body.key)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Access database error.") from None
+    if kid is None:
+        raise HTTPException(status_code=401, detail="Invalid clearance key.")
+    try:
+        token = make_cookie_value(kid)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from None
+    resp = JSONResponse({"ok": True})
+    cookie_secure = os.environ.get("COOKIE_SECURE", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    resp.set_cookie(
+        COOKIE_NAME,
+        token,
+        max_age=30 * 24 * 3600,
+        httponly=True,
+        samesite="lax",
+        secure=cookie_secure,
+        path="/",
+    )
+    return resp
+
+
+_IMG_PROXY_MAX_BYTES = 25_000_000
 
 
 def _allowed_image_proxy_url(url: str) -> bool:

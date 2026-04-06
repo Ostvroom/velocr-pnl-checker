@@ -692,6 +692,7 @@ main {
   font-weight: 600;
   font-size: 0.92rem;
   margin-bottom: 0.2rem;
+  word-break: break-all;
 }
 
 .trade-body .meta {

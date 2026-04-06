@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLASSIFIED ACCESS · NFT PNL Checker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/gate.css" />
+</head>
+<body class="gate-body">
+  <div class="gate-bg" aria-hidden="true"></div>
+  <div class="gate-wrap">
+    <div class="gate-panel">
+      <div class="gate-kicker">
+        <span>CIA / OC</span>
+        <span class="sep">•</span>
+        <span>SECURE TERMINAL</span>
+        <span class="sep">•</span>
+        <span class="live">AUTH REQ</span>
+      </div>
+      <h1 class="gate-title">Clearance authentication</h1>
+      <p class="gate-sub">
+        This system is restricted. Enter your issued clearance key to proceed.
+        No private keys — access token only.
+      </p>
+      <form id="gate-form" autocomplete="off">
+        <label class="gate-label" for="gate-key">Clearance key</label>
+        <input
+          id="gate-key"
+          class="gate-input"
+          type="password"
+          name="key"
+          spellcheck="false"
+          autocapitalize="off"
+          maxlength="256"
+          placeholder="VLCR-XXXX-XXXX-XXXXXXXX"
+          required
+        />
+        <div class="gate-actions">
+          <button type="submit" class="gate-btn gate-btn--primary">Authenticate</button>
+          <button type="button" class="gate-btn gate-btn--ghost" id="gate-toggle">Show key</button>
+        </div>
+        <div class="gate-msg" id="gate-msg" role="status" aria-live="polite"></div>
+      </form>
+      <p class="gate-foot">
+        OPSEC: Do not share clearance keys. Session uses HTTP-only cookie.
+        Unauthorized access is prohibited.
+      </p>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const form = document.getElementById("gate-form");
+      const input = document.getElementById("gate-key");
+      const msg = document.getElementById("gate-msg");
+      const toggle = document.getElementById("gate-toggle");
+
+      toggle.addEventListener("click", function () {
+        input.type = input.type === "password" ? "text" : "password";
+        toggle.textContent = input.type === "password" ? "Show key" : "Hide key";
+      });
+
+      form.addEventListener("submit", async function (e) {
+        e.preventDefault();
+        msg.textContent = "";
+        msg.classList.remove("ok");
+        const key = (input.value || "").trim();
+        if (!key) return;
+
+        try {
+          const r = await fetch("/api/auth/access", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify({ key: key }),
+          });
+          const data = await r.json().catch(function () {
+            return {};
+          });
+          if (r.ok) {
+            msg.textContent = "Access granted. Redirecting…";
+            msg.classList.add("ok");
+            window.location.href = "/";
+            return;
+          }
+          msg.textContent =
+            typeof data.detail === "string"
+              ? data.detail
+              : "Authentication failed.";
+        } catch (err) {
+          msg.textContent = "Network error. Retry.";
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

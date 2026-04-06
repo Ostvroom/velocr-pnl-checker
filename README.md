@@ -7,7 +7,7 @@ FastAPI dashboard for estimating NFT trading PnL on EVM chains (Moralis-backed).
 1. Create a `.env` file in the project root:
 
 ```
-MORALIS_API_KEY=YOUR_KEY_HERE
+SIMPLEHASH_API_KEY=YOUR_KEY_HERE
 ```
 
 2. Install dependencies:
