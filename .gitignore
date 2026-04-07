@@ -4,6 +4,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-data/
+data/*
+!data/keys.txt
 *clearance*keys*.txt
 access_keys*.txt
