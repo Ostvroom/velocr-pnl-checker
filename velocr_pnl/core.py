@@ -385,11 +385,21 @@ async def _pipeline(
                         worst_trade = trade_obj
 
     # Attempt to grab some top-level info for avatar/name
-    wallet_name = enriched[0]["row"].get("collection_name") if enriched else None # fallback, usually not good
+    wallet_name = None
+    wallet_avatar = None
+    
+    # If we have some collection data, use it as a placeholder avatar
+    if enriched:
+        for e in enriched:
+            if e["row"].get("collection_image"):
+                wallet_avatar = e["row"]["collection_image"]
+                break
 
     pnl: Dict[str, Any] = {
         "mode": "id_card",
         "wallet": wallet_address,
+        "wallet_name": wallet_name,
+        "wallet_avatar": wallet_avatar,
         "chain": chain_name,
         "symbol": symbol,
         "total_completed_trades": total_completed_trades,
@@ -397,7 +407,7 @@ async def _pipeline(
         "worst_trade": worst_trade,
     }
 
-    return pnl, {}
+    return pnl, {"normalized_trades": []}
 
 
 
