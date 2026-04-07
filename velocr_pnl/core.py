@@ -51,6 +51,36 @@ def _nft_base(chain_key: str, key: str) -> str:
 def _rpc_url(chain_key: str, key: str) -> str:
     return indexer._rpc_url(chain_key, key)
 
+
+async def _fetch_latest_block_number(chain_key: str) -> Optional[int]:
+    """Chain tip for period checks when transfer rows lack timestamp_unix."""
+    key = _api_key()
+    if not key:
+        return None
+    rpc = _rpc_url(chain_key, key)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                rpc,
+                json={"jsonrpc": "2.0", "id": 1, "method": "eth_blockNumber", "params": []},
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as r:
+                if r.status != 200:
+                    return None
+                data = await r.json()
+        res = data.get("result")
+        if not res:
+            return None
+        return int(res, 16) if isinstance(res, str) and res.startswith("0x") else int(res)
+    except (TypeError, ValueError, aiohttp.ClientError, asyncio.TimeoutError):
+        return None
+
+
+def _approx_block_span_for_days(days: int) -> int:
+    """Same ~12s/block assumption as indexer._resolve_from_block_decimal."""
+    return int((max(0, days) * 86400) / 12)
+
+
 def _resolve_ipfs_url(url: str) -> str:
     u = (url or "").strip()
     if u.lower().startswith("ipfs://"):
@@ -292,6 +322,12 @@ async def _pipeline(
     if moralis_days is not None and moralis_days > 0:
         cutoff = int(time.time()) - moralis_days * 86400
 
+    cutoff_block = 0
+    if moralis_days is not None and moralis_days > 0:
+        tip = await _fetch_latest_block_number(chain_key)
+        if tip is not None:
+            cutoff_block = max(0, tip - _approx_block_span_for_days(moralis_days))
+
     # Redesigned ID Card Metric Engine: Best and Worst Trade ONLY
     # 100% Accurate Token ID pairing.
     
@@ -365,8 +401,17 @@ async def _pipeline(
                 profit = sell_e["price"] - e["price"]
                 # Purity check: if both are 0, it's just a transfer loop, not a trade.
                 if sell_e["price"] > 0 or e["price"] > 0:
-                    # Period filter: best/worst (and count) use sells realized in the chosen window.
-                    in_period = cutoff == 0 or (sell_e["ts"] >= cutoff)
+                    # Period: prefer sell timestamp; many indexer rows have timestamp_unix=0 — use block vs chain tip.
+                    sell_ts = sell_e["ts"]
+                    sell_bn = sell_e["row"].get("block_number") or 0
+                    if cutoff == 0:
+                        in_period = True
+                    elif sell_ts > 0:
+                        in_period = sell_ts >= cutoff
+                    elif cutoff_block > 0 and sell_bn > 0:
+                        in_period = sell_bn >= cutoff_block
+                    else:
+                        in_period = True
                     trade_obj = {
                         "contract_addr": e["contract_addr"],
                         "token_id": e["token_id"],

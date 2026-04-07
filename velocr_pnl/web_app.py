@@ -118,8 +118,9 @@ async def access_gate_middleware(request: Request, call_next):
             status_code=401,
         )
 
-    if gate_path.is_file():
-        return FileResponse(gate_path, headers=dict(_HTML_NO_CACHE))
+    # Do not serve gate.html for random paths (WordPress probes, etc.) — that returned 200 and cluttered logs.
+    if request.method == "GET":
+        return JSONResponse({"detail": "Not found"}, status_code=404)
     return JSONResponse({"detail": "Unauthorized"}, status_code=401)
 
 
