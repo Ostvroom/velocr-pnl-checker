@@ -142,6 +142,30 @@ function daysQuery(d) {
   return `days=${encodeURIComponent(d)}`;
 }
 
+async function fetchJson(url) {
+  const r = await fetch(url);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const msg = data.detail || data.message || r.statusText || "Request failed";
+    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+  }
+  return data;
+}
+
+function setError(msg) {
+  const el = $("#dash-error");
+  if (!msg) {
+    if (el) el.hidden = true;
+    if (el) el.textContent = "";
+    return;
+  }
+  if (el) {
+    el.hidden = false;
+    el.textContent = msg;
+  }
+}
+
+
 function renderTradeBox(boxPrefix, trade, symbol, chain) {
   const box = $(`#box-${boxPrefix}`);
   if (!trade) {
