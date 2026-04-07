@@ -61,6 +61,19 @@ async def _app_startup() -> None:
     init_indexer_db()
     if gate_enabled():
         init_db()
+        from velocr_pnl.gate_auth import insert_keys
+        keys_file = ROOT / "data" / "keys.txt"
+        if keys_file.is_file():
+            keys = []
+            with open(keys_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        keys.append(line)
+            if keys:
+                inserted = insert_keys(keys)
+                if inserted > 0:
+                    print(f"Auto-seeded {inserted} keys from data/keys.txt")
 
 
 @app.middleware("http")
