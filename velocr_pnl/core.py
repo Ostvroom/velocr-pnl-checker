@@ -431,16 +431,17 @@ async def _pipeline(
     period_floor = 0.0
     u_err = None
     holds_n = sum(period_unrealized_contracts.values())
+    print(f"[unrealized] days={moralis_days} | unmatched_buys={holds_n} | contracts={len(period_unrealized_contracts)} | period_cost={period_unrealized_cost:.4f}")
     if not skip_unrealized and period_unrealized_contracts:
         sem = asyncio.Semaphore(6)
-        async def _get_fp(c, q):
-            nonlocal period_floor
-            async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession() as fp_session:
+            async def _get_fp(c, q):
+                nonlocal period_floor
                 async with sem:
-                    fp = await _fetch_floor(session, base, c, chain_key)
-            period_floor += fp * q
-        
-        await asyncio.gather(*[_get_fp(c, q) for c, q in period_unrealized_contracts.items()], return_exceptions=True)
+                    fp = await _fetch_floor(fp_session, base, c, chain_key)
+                period_floor += fp * q
+            await asyncio.gather(*[_get_fp(c, q) for c, q in period_unrealized_contracts.items()], return_exceptions=True)
+    print(f"[unrealized] period_floor={period_floor:.4f} | unrealized={period_floor - period_unrealized_cost:.4f}")
 
     total_cost = buy_vol + mint_spend
     net = sell_vol - total_cost
@@ -476,6 +477,9 @@ async def _pipeline(
         "unrealized_pnl_native": period_floor - period_unrealized_cost if not u_err else None,
         "holdings_floor_native": period_floor if not u_err else None,
         "holdings_nft_count": holds_n if not u_err else None,
+        "_debug_period_cost": round(period_unrealized_cost, 6),
+        "_debug_unmatched_buys": holds_n,
+        "_debug_contracts_count": len(period_unrealized_contracts),
         "pnl_percent": pct,
         "trades_rows": len(normalized),
         "scope_note": scope,
