@@ -1,0 +1,372 @@
+/* Cyberpunk ID Card Styles - Inspired by realfollowers */
+
+:root {
+  --neon-green: #10b981;
+  --neon-red: #ef4444;
+  --neon-blue: #3b82f6;
+  --cyber-bg: #050505;
+  --cyber-glass: rgba(18, 18, 22, 0.7);
+  --cyber-border: rgba(255, 255, 255, 0.08);
+}
+
+body.dash-body {
+  background: radial-gradient(circle at center, #111115 0%, #000000 100%);
+  color: #fff;
+  min-height: 100vh;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-family: 'DM Sans', sans-serif;
+  overflow-x: hidden;
+}
+
+/* Watermark Pattern */
+body.dash-body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: url('data:image/svg+xml;utf8,<svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"><text x="10" y="30" font-family="monospace" font-size="10" fill="rgba(255,255,255,0.02)" transform="rotate(-45 30 30)">VELCOR3</text></svg>');
+  z-index: 0;
+  pointer-events: none;
+}
+
+.dash-bg, .dash-brand-bar {
+  display: none !important;
+}
+
+.id-card-wrapper {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 600px;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.id-card-container {
+  position: relative;
+  width: 100%;
+}
+
+.id-card-glow {
+  position: absolute;
+  inset: -15px;
+  background: radial-gradient(ellipse at top right, rgba(16, 185, 129, 0.15), transparent 50%),
+              radial-gradient(ellipse at bottom left, rgba(239, 68, 68, 0.15), transparent 50%);
+  filter: blur(40px);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.id-card {
+  position: relative;
+  z-index: 1;
+  background: var(--cyber-glass);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border: 1px solid var(--cyber-border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.id-card-header {
+  padding: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%);
+}
+
+.id-wallet-profile {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.id-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: #222;
+  border: 1px solid rgba(255,255,255,0.1);
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+.id-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.id-wallet-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.id-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  color: #888;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.id-verified {
+  color: var(--neon-blue);
+  background: rgba(59, 130, 246, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+}
+
+.id-wallet-name {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255,255,255,0.2);
+}
+
+.id-wallet-address {
+  font-size: 0.8rem;
+  color: #aaa;
+}
+
+.id-network {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 0.7rem;
+  color: #888;
+  letter-spacing: 0.05em;
+}
+
+.id-network strong {
+  margin-top: 0.2rem;
+  font-size: 0.9rem;
+  color: #fff;
+  background: rgba(255,255,255,0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+/* Body */
+.id-card-body {
+  padding: 1.5rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+.id-trade-box {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 1.25rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.id-trade-box::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+}
+
+.id-trade-best::before { background: var(--neon-green); box-shadow: 0 0 15px var(--neon-green); }
+.id-trade-worst::before { background: var(--neon-red); box-shadow: 0 0 15px var(--neon-red); }
+
+.trade-box-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.trade-box-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #fff;
+  text-transform: uppercase;
+}
+.id-trade-best .trade-box-label { color: var(--neon-green); text-shadow: 0 0 8px rgba(16, 185, 129, 0.5); }
+.id-trade-worst .trade-box-label { color: var(--neon-red); text-shadow: 0 0 8px rgba(239, 68, 68, 0.5); }
+
+.trade-box-roi {
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: var(--mono);
+}
+.trade-box-roi.pos { color: var(--neon-green); }
+.trade-box-roi.neg { color: var(--neon-red); }
+
+.trade-box-content {
+  display: flex;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.trade-img {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  background: #1a1a1a;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.trade-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.trade-details {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.trade-profit {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.trade-profit.pos { color: var(--neon-green); text-shadow: 0 0 20px rgba(16, 185, 129, 0.4); }
+.trade-profit.neg { color: var(--neon-red); text-shadow: 0 0 20px rgba(239, 68, 68, 0.4); }
+
+.trade-name {
+  font-size: 0.85rem;
+  color: #ccc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 250px;
+}
+
+.trade-sub-stats {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.7rem;
+  color: #777;
+  margin-top: 0.25rem;
+}
+
+.trade-sub-stats span span {
+  color: #fff;
+}
+
+.trade-box-footer {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed rgba(255,255,255,0.1);
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  color: #666;
+}
+.trade-box-footer a { color: inherit; text-decoration: none; }
+.trade-box-footer a:hover { color: #fff; text-decoration: underline; }
+
+/* Empty state */
+.id-trade-box.is-empty .trade-box-content,
+.id-trade-box.is-empty .trade-box-footer {
+  opacity: 0.2;
+  filter: grayscale(1);
+}
+.id-trade-box.is-empty::after {
+  content: "NO TRADE DETECTED";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #666;
+}
+
+
+/* Footer */
+.id-card-footer {
+  padding: 1rem 1.5rem;
+  background: rgba(0,0,0,0.4);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.id-footer-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.id-footer-label {
+  font-size: 0.6rem;
+  color: #666;
+  letter-spacing: 0.05em;
+}
+
+.id-footer-val {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.id-watermark-logo {
+  height: 24px;
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+
+.id-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.id-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #aaa;
+  padding: 0.75rem 2rem;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  transition: all 0.2s;
+  backdrop-filter: blur(10px);
+}
+
+.id-btn:hover {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  border-color: rgba(255,255,255,0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+}
+
+/* Override utility classes from old css */
+.mono {
+  font-family: 'JetBrains Mono', monospace;
+}

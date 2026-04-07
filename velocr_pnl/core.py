@@ -290,26 +290,22 @@ async def _pipeline(
     if moralis_days is not None and moralis_days > 0:
         cutoff = int(time.time()) - moralis_days * 86400
 
-    def _in_period(ts: int) -> bool:
-        """True if this row falls within the selected time window."""
-        if cutoff == 0:
-            return True  # "All time"
-        if ts == 0:
-            return True  # unknown timestamp — include by default
-        return ts >= cutoff
-
-    # 4. Resolve prices for every row & do buy/sell matching on the FULL history.
-    #    Rows are ordered newest→oldest, so a SELL appears before the matching BUY.
-
+    # Redesigned ID Card Metric Engine: Best and Worst Trade ONLY
+    # 100% Accurate Token ID pairing.
+    
     def sanitize_name(n):
         if not n: return ""
         if n.count('?') > 3 or '??' in n: return ""
         if len(n) > 30 and all(c in '0123456789abcdefABCDEF?' for c in n): return ""
         return n.strip()
 
-    # Pre-compute price & side for every row (full history)
+    # Pre-compute price & side for every row
     enriched: List[Dict[str, Any]] = []
     for r in rows:
+        # Ignore self-transfers to prevent false buys/sells
+        if r["from_address"].lower() == r["to_address"].lower():
+            continue
+
         r["collection_name"] = sanitize_name(r.get("collection_name"))
         side = "buy" if r["to_address"].lower() == wl else "sell"
         legacy = float(r["price_native"] or 0.0)
@@ -344,185 +340,65 @@ async def _pipeline(
             "contract_addr": contract_addr,
             "token_id": token_id,
             "ts": r["timestamp_unix"] or 0,
+            "tx": r["tx_hash"],
         })
 
-    # Pass 1: Match buys ↔ sells across the ENTIRE history (newest→oldest).
-    # Track which buys are "matched" (= realized) vs "unmatched" (= still held).
-    pending_sells: Dict[Tuple[str, str], List[Tuple[float, int]]] = {}  # key → [(sell_price, sell_ts), ...]
-    matched_buy_indices: set = set()     # indices of buys that matched a sell
-    matched_sell_indices: set = set()    # for reference
+    # Strict 100% Accurate Pairing
+    pending_sells: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}  
+    best_trade = None
+    worst_trade = None
+    total_completed_trades = 0
 
-    for idx, e in enumerate(enriched):
+    for e in enriched:
         nft_key = (e["contract_addr"], e["token_id"])
         if e["side"] == "sell":
             if nft_key not in pending_sells:
                 pending_sells[nft_key] = []
-            pending_sells[nft_key].append((e["price"], idx))
+            pending_sells[nft_key].append(e)
         elif e["side"] == "buy":
+            # Match strict token ID
             if nft_key in pending_sells and pending_sells[nft_key]:
-                sell_price, sell_idx = pending_sells[nft_key].pop(0)
-                matched_buy_indices.add(idx)
-                matched_sell_indices.add(sell_idx)
-                # Store the PnL on the enriched entry for later
-                e["_pnl_event"] = sell_price - e["price"]
-                e["_matched_sell_price"] = sell_price
+                sell_e = pending_sells[nft_key].pop(0)
+                
+                profit = sell_e["price"] - e["price"]
+                # Purity check: if both are 0, it's just a transfer loop, not a trade.
+                if sell_e["price"] > 0 or e["price"] > 0:
+                    total_completed_trades += 1
+                    trade_obj = {
+                        "contract_addr": e["contract_addr"],
+                        "token_id": e["token_id"],
+                        "collection_name": e["row"].get("collection_name") or "",
+                        "image_url": e["row"].get("collection_image") or "",
+                        "buy_price": e["price"],
+                        "sell_price": sell_e["price"],
+                        "profit": profit,
+                        "roi": (profit / e["price"] * 100) if e["price"] > 0 else (profit * 100 if profit > 0 else 0),
+                        "buy_tx": e["tx"],
+                        "sell_tx": sell_e["tx"],
+                        "buy_ts": e["ts"],
+                        "sell_ts": sell_e["ts"]
+                    }
+                    
+                    if best_trade is None or profit > best_trade["profit"]:
+                        best_trade = trade_obj
+                    if worst_trade is None or profit < worst_trade["profit"]:
+                        worst_trade = trade_obj
 
-    # Pass 2: Compute period-filtered stats (only rows within the time window).
-    normalized: List[Dict[str, Any]] = []
-    buy_vol = 0.0
-    sell_vol = 0.0
-    mint_spend = 0.0
-    mint_count = 0
-    buy_count = 0
-    sell_count = 0
-    realized_pnl_native = 0.0
-    best_trade: Optional[float] = None
-    worst_trade: Optional[float] = None
-    period_unrealized_cost = 0.0
-    period_unrealized_contracts: Dict[str, int] = {}
-    buckets: Dict[str, Dict[str, Any]] = {}
-
-    for idx, e in enumerate(enriched):
-        r = e["row"]
-        side = e["side"]
-        price = e["price"]
-        contract_addr = e["contract_addr"]
-        token_id = e["token_id"]
-        ts = e["ts"]
-
-        if not _in_period(ts):
-            continue  # skip rows outside the selected time window for display
-
-        # Realized PnL: only for matched buys within the period
-        if side == "buy" and idx in matched_buy_indices:
-            pnl_event = e.get("_pnl_event", 0.0)
-            realized_pnl_native += pnl_event
-            if best_trade is None or pnl_event > best_trade:
-                best_trade = pnl_event
-            if worst_trade is None or pnl_event < worst_trade:
-                worst_trade = pnl_event
-
-        # Unrealized: buys in-period that were NOT matched to any sell (anywhere in history)
-        if side == "buy" and idx not in matched_buy_indices:
-            period_unrealized_cost += price
-            period_unrealized_contracts[contract_addr] = period_unrealized_contracts.get(contract_addr, 0) + 1
-
-        # Volume / count stats
-        if side == "buy":
-            if r["event_type"] == "mint":
-                mint_count += 1
-                mint_spend += price
-            else:
-                buy_count += 1
-                buy_vol += price
-        else:
-            sell_count += 1
-            sell_vol += price
-
-        # Bucket aggregation (per-collection)
-        if contract_addr not in buckets:
-            buckets[contract_addr] = {
-                "token_address": contract_addr,
-                "collection_name": r.get("collection_name") or "",
-                "collection_image": r.get("collection_image") or "",
-                "symbol": symbol,
-                "buy_volume": 0.0,
-                "sell_volume": 0.0,
-                "buy_count": 0,
-                "sell_count": 0,
-                "net_native": 0.0,
-                "realized_pnl": 0.0,
-            }
-        b = buckets[contract_addr]
-        if side == "buy":
-            b["buy_volume"] += price
-            b["buy_count"] += 1
-        else:
-            b["sell_volume"] += price
-            b["sell_count"] += 1
-        if side == "buy" and idx in matched_buy_indices:
-            b["realized_pnl"] = b.get("realized_pnl", 0.0) + e.get("_pnl_event", 0.0)
-
-        normalized.append({
-            "side": side,
-            "price_eth": price,
-            "price_wei": int(price * 1e18),
-            "buyer_address": r['to_address'],
-            "seller_address": r['from_address'],
-            "token_address": r['contract_address'],
-            "token_id": token_id,
-            "transaction_hash": r['tx_hash'],
-            "block_number": r['block_number'],
-            "timestamp_unix": ts,
-            "marketplace": r['marketplace'] or "",
-            "chain_symbol": symbol,
-            "payment_symbol": r['payment_token'] or symbol,
-            "token_name": r.get("collection_name") or "",
-            "image_url": r.get("collection_image") or "",
-        })
-
-    # 5. Live Unrealized — fetch floor for top 30 contracts by holdings count
-    period_floor = 0.0
-    u_err = None
-    holds_n = sum(period_unrealized_contracts.values())
-    top_contracts = sorted(period_unrealized_contracts.items(), key=lambda x: x[1], reverse=True)[:30]
-    if not skip_unrealized and top_contracts:
-        sem = asyncio.Semaphore(5)
-        async with aiohttp.ClientSession() as fp_session:
-            async def _get_fp(c, q):
-                nonlocal period_floor
-                async with sem:
-                    fp = await _fetch_floor(fp_session, base, c, chain_key)
-                period_floor += fp * q
-            try:
-                await asyncio.wait_for(
-                    asyncio.gather(*[_get_fp(c, q) for c, q in top_contracts], return_exceptions=True),
-                    timeout=20.0,
-                )
-            except asyncio.TimeoutError:
-                pass  # use partial results
-
-    total_cost = buy_vol + mint_spend
-    net = sell_vol - total_cost
-    pct = (net / total_cost * 100.0) if total_cost > 1e-12 else None
-    
-    tokens = list(buckets.values())
-    for t in tokens: t["net_native"] = t["sell_volume"] - t["buy_volume"]
-    tokens.sort(key=lambda x: abs(x["net_native"]), reverse=True)
-
-    period_note = (
-        f"Last {moralis_days} days · Alchemy"
-        if moralis_days and moralis_days > 0
-        else "All time · Alchemy"
-    )
-    scope = f"**{len(normalized)}** indexed events · {period_note}"
+    # Attempt to grab some top-level info for avatar/name
+    wallet_name = enriched[0]["row"].get("collection_name") if enriched else None # fallback, usually not good
 
     pnl: Dict[str, Any] = {
-        "mode": "alchemy_indexed",
+        "mode": "id_card",
         "wallet": wallet_address,
         "chain": chain_name,
         "symbol": symbol,
-        "moralis_period_note": period_note,
-        "bought_trades": buy_count,
-        "sold_trades": sell_count,
-        "est_buy_volume": buy_vol,
-        "est_sell_volume": sell_vol,
-        "mint_count": mint_count,
-        "mint_spend": mint_spend,
-        "net_trades": net,
-        "realized_pnl_native": realized_pnl_native,
+        "total_completed_trades": total_completed_trades,
         "best_trade": best_trade,
         "worst_trade": worst_trade,
-        "unrealized_pnl_native": period_floor - period_unrealized_cost if not u_err else None,
-        "holdings_floor_native": period_floor if not u_err else None,
-        "holdings_nft_count": holds_n if not u_err else None,
-        "pnl_percent": pct,
-        "trades_rows": len(normalized),
-        "scope_note": scope,
-        "tokens": tokens[:50],
     }
 
-    return pnl, {"normalized_trades": normalized}
+    return pnl, {}
+
 
 
 # ─── Public API ───

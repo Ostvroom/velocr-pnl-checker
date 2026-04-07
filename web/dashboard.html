@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/id-card.css" />
   <!-- Google tag (gtag.js) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-VBHZ0K20SV"></script>
   <script>
@@ -59,43 +60,95 @@
     </div>
   </header>
 
-  <header class="dash-top">
-    <a href="/" class="dash-back">← Home</a>
-    <div class="dash-wallet-block">
-      <span class="dash-wallet-label">Wallet</span>
-      <span class="dash-wallet" id="dash-wallet">—</span>
-      <span class="dash-wallet-name" id="dash-wallet-name" hidden>—</span>
-      <span class="dash-chain-pill" id="dash-chain-pill">ETH</span>
-    </div>
-    <div class="dash-time-pills" id="dash-time-pills" role="tablist" aria-label="Time range">
-      <button type="button" data-days="7" class="dash-pill">7d</button>
-      <button type="button" data-days="30" class="dash-pill">30d</button>
-      <button type="button" data-days="90" class="dash-pill is-active">90d</button>
-      <button type="button" data-days="365" class="dash-pill">365d</button>
-    </div>
-  </header>
-
-  <main class="dash-main">
+  <main class="id-card-wrapper">
     <div id="dash-error" class="error-banner" hidden></div>
 
-    <section class="dash-row-2">
-      <div class="dash-card dash-card-stats">
-        <h2 class="dash-card-title">Stats</h2>
-        <dl class="dash-stats-dl" id="dash-stats"></dl>
-      </div>
-      <div class="dash-card dash-card-trades">
-        <h2 class="dash-card-title dash-card-title--trades">NFT trades</h2>
-        <ul class="dash-trade-list trade-list" id="dash-trade-list"></ul>
-      </div>
-    </section>
+    <div class="id-card-container">
+      <div class="id-card-glow"></div>
+      
+      <div class="id-card">
+        <!-- Header: Wallet Info -->
+        <div class="id-card-header">
+          <div class="id-wallet-profile">
+            <div class="id-avatar" id="dash-avatar-wrapper">
+              <div class="nft-avatar nft-avatar--ph">◆</div>
+            </div>
+            <div class="id-wallet-texts">
+              <span class="id-label">TRADER IDENTITY <span class="id-verified">✓ VERIFIED</span></span>
+              <h1 class="id-wallet-name mono" id="dash-wallet-name">Loading...</h1>
+              <span class="id-wallet-address mono" id="dash-wallet">—</span>
+            </div>
+          </div>
+          <div class="id-network">
+            <span>CHAIN</span>
+            <strong id="dash-chain-pill">ETH</strong>
+          </div>
+        </div>
 
-    <section class="dash-card dash-token-section">
-      <div class="dash-card-head">
-        <h2 class="dash-card-title">Collections</h2>
-        <span class="muted" id="dash-token-summary"></span>
+        <!-- Body: Best & Worst Trades -->
+        <div class="id-card-body">
+          <div class="id-trade-box id-trade-best" id="box-best">
+            <div class="trade-box-header">
+              <span class="trade-box-label">BEST TRADE</span>
+              <span class="trade-box-roi" id="val-best-roi">—</span>
+            </div>
+            <div class="trade-box-content">
+              <div class="trade-img" id="img-best">
+                <div class="nft-avatar nft-avatar--ph">◆</div>
+              </div>
+              <div class="trade-details">
+                <span class="trade-profit" id="val-best-profit">— ETH</span>
+                <span class="trade-name" id="val-best-name">—</span>
+                <div class="trade-sub-stats mono">
+                  <span>BUY: <span id="val-best-buy">—</span></span>
+                  <span>SELL: <span id="val-best-sell">—</span></span>
+                </div>
+              </div>
+            </div>
+            <div class="trade-box-footer mono">
+              <span>BOUGHT: <span id="ts-best-buy">—</span></span>
+              <span>SOLD: <span id="ts-best-sell">—</span></span>
+            </div>
+          </div>
+
+          <div class="id-trade-box id-trade-worst" id="box-worst">
+            <div class="trade-box-header">
+              <span class="trade-box-label">WORST TRADE</span>
+              <span class="trade-box-roi" id="val-worst-roi">—</span>
+            </div>
+            <div class="trade-box-content">
+              <div class="trade-img" id="img-worst">
+                <div class="nft-avatar nft-avatar--ph">◆</div>
+              </div>
+              <div class="trade-details">
+                <span class="trade-profit" id="val-worst-profit">— ETH</span>
+                <span class="trade-name" id="val-worst-name">—</span>
+                <div class="trade-sub-stats mono">
+                  <span>BUY: <span id="val-worst-buy">—</span></span>
+                  <span>SELL: <span id="val-worst-sell">—</span></span>
+                </div>
+              </div>
+            </div>
+            <div class="trade-box-footer mono">
+              <span>BOUGHT: <span id="ts-worst-buy">—</span></span>
+              <span>SOLD: <span id="ts-worst-sell">—</span></span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="id-card-footer">
+          <div class="id-footer-stat">
+            <span class="id-footer-label">TOTAL PAIRED TRADES</span>
+            <span class="id-footer-val mono" id="val-total-trades">—</span>
+          </div>
+          <img src="/static/velcor-flame.png" alt="Velcor" class="id-watermark-logo" />
+        </div>
       </div>
-      <div class="dash-token-grid" id="dash-token-grid"></div>
-    </section>
+    </div>
+    
+    <div class="id-actions">
+      <a href="/" class="id-btn">← NEW SCAN</a>
+    </div>
   </main>
 
   <a
