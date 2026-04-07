@@ -210,12 +210,14 @@ async def _pipeline(
     finally:
         conn.close()
 
-    # 2. Trigger Sync if stale (30 mins)
-    if time.time() - last_sync > 1800:
+    # 2. Trigger sync if stale (default 30 min; set VELOCR_SYNC_STALE_S e.g. 3600 to reduce API load)
+    idx_pages = _env_int("VELOCR_INDEX_MAX_PAGES", max_sale_pages, 1, 50)
+    stale_s = _env_int("VELOCR_SYNC_STALE_S", 1800, 60, 86400 * 7)
+    if time.time() - last_sync > stale_s:
         await indexer.sync_wallet(
             wl,
             chain_key,
-            max_pages=max_sale_pages,
+            max_pages=idx_pages,
             days_window=moralis_days,
         )
 
@@ -363,7 +365,8 @@ async def _pipeline(
                 profit = sell_e["price"] - e["price"]
                 # Purity check: if both are 0, it's just a transfer loop, not a trade.
                 if sell_e["price"] > 0 or e["price"] > 0:
-                    total_completed_trades += 1
+                    # Period filter: best/worst (and count) use sells realized in the chosen window.
+                    in_period = cutoff == 0 or (sell_e["ts"] >= cutoff)
                     trade_obj = {
                         "contract_addr": e["contract_addr"],
                         "token_id": e["token_id"],
@@ -378,11 +381,12 @@ async def _pipeline(
                         "buy_ts": e["ts"],
                         "sell_ts": sell_e["ts"]
                     }
-                    
-                    if best_trade is None or profit > best_trade["profit"]:
-                        best_trade = trade_obj
-                    if worst_trade is None or profit < worst_trade["profit"]:
-                        worst_trade = trade_obj
+                    if in_period:
+                        total_completed_trades += 1
+                        if best_trade is None or profit > best_trade["profit"]:
+                            best_trade = trade_obj
+                        if worst_trade is None or profit < worst_trade["profit"]:
+                            worst_trade = trade_obj
 
     # Attempt to grab some top-level info for avatar/name
     wallet_name = None

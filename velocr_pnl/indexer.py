@@ -7,6 +7,16 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 from velocr_pnl.database import get_db_connection, init_db
 
+
+def _page_delay_s() -> float:
+    """Pause between paginated Alchemy calls (rate limit + burst smoothing). Default 0.03s."""
+    try:
+        v = float((os.getenv("VELOCR_INDEX_PAGE_DELAY_S") or "0.03").strip())
+        return max(0.0, min(v, 0.5))
+    except ValueError:
+        return 0.03
+
+
 # Reuse the same chain metadata as core.py
 PNL_CHAIN_META = {
     "eth":       ("Ethereum", "ETH"),
@@ -173,6 +183,110 @@ async def _resolve_from_block_decimal(
     return str(fb)
 
 
+def _merge_payment_partials(partials: List[Dict[str, Dict[str, Any]]]) -> Dict[str, Dict[str, Any]]:
+    out: Dict[str, Dict[str, Any]] = {}
+    for part in partials:
+        for k, v in part.items():
+            if k in out:
+                out[k]["amount"] += v["amount"]
+            else:
+                out[k] = dict(v)
+    return out
+
+
+async def _fetch_payment_leg(
+    session: aiohttp.ClientSession,
+    chain: str,
+    wallet: str,
+    key: str,
+    max_pages: int,
+    from_block: Optional[str],
+    direction_key: str,
+    addr_param: str,
+    category: List[str],
+    label: str,
+) -> Dict[str, Dict[str, Any]]:
+    """One stream of internal ETH or WETH transfers (in or out)."""
+    rpc = _rpc_url(chain, key)
+    weth = WRAPPED_NATIVE.get(chain, "")
+    result: Dict[str, Dict[str, Any]] = {}
+    page_key = None
+    delay = _page_delay_s()
+    for _ in range(max(1, max_pages // 4)):
+        block_params: Dict[str, Any] = {
+            addr_param: wallet,
+            "category": category,
+            "withMetadata": False,
+            "excludeZeroValue": True,
+            "maxCount": "0x3e8",
+        }
+        if from_block:
+            block_params["fromBlock"] = from_block
+        if page_key:
+            block_params["pageKey"] = page_key
+
+        payload = {
+            "jsonrpc": "2.0", "id": 1,
+            "method": "alchemy_getAssetTransfers",
+            "params": [block_params],
+        }
+        async with session.post(rpc, json=payload) as r:
+            if r.status != 200:
+                break
+            data = await r.json()
+
+        if data.get("error"):
+            break
+
+        transfers = (data.get("result") or {}).get("transfers") or []
+        for t in transfers:
+            if label == "WETH":
+                contract = ((t.get("rawContract") or {}).get("address") or "").lower()
+                if contract != weth:
+                    continue
+
+            tx = (t.get("hash") or "").lower()
+            if not tx:
+                continue
+
+            raw_val = (t.get("rawContract") or {}).get("value")
+            val_float = 0.0
+            if raw_val:
+                try:
+                    val_float = int(raw_val, 16) / 1e18
+                except (ValueError, TypeError):
+                    pass
+            if val_float <= 0:
+                direct_val = t.get("value")
+                if direct_val is not None:
+                    try:
+                        val_float = float(direct_val)
+                    except (TypeError, ValueError):
+                        pass
+
+            if val_float <= 0:
+                continue
+
+            key_str = f"{tx}:{direction_key}"
+            if key_str in result:
+                result[key_str]["amount"] += val_float
+            else:
+                result[key_str] = {
+                    "tx_hash": tx,
+                    "amount": val_float,
+                    "token": label,
+                    "direction": direction_key,
+                }
+
+        page_key = (data.get("result") or {}).get("pageKey")
+        if not page_key or not transfers:
+            break
+        if delay > 0:
+            await asyncio.sleep(delay)
+
+    return result
+
+
 async def _fetch_payment_transfers(
     session: aiohttp.ClientSession,
     chain: str,
@@ -184,91 +298,15 @@ async def _fetch_payment_transfers(
     """
     Fetch ETH (internal) and WETH (erc20) value flows for the wallet to infer
     sale prices when Alchemy getNFTSales has no record (Seaport v1.5+ gap).
-
-    Returns {tx_hash_lower: {"amount": float, "token": "ETH"|"WETH", "direction": "in"|"out"}}
-    For a given tx_hash, INCOMING amount = seller received; OUTGOING = buyer paid.
-    If multiple transfers in same tx, we sum them (royalties go to multiple addresses).
+    The four streams run in parallel to cut wall-clock time.
     """
-    rpc = _rpc_url(chain, key)
-    weth = WRAPPED_NATIVE.get(chain, "")
-    result: Dict[str, Dict[str, Any]] = {}
-
-    for direction_key, addr_param in [("in", "toAddress"), ("out", "fromAddress")]:
-        for category, label in [(["internal"], "ETH"), (["erc20"], "WETH")]:
-            page_key = None
-            for _ in range(max(1, max_pages // 4)):
-                block_params: Dict[str, Any] = {
-                    addr_param: wallet,
-                    "category": category,
-                    "withMetadata": False,
-                    "excludeZeroValue": True,
-                    "maxCount": "0x3e8",
-                }
-                if from_block:
-                    block_params["fromBlock"] = from_block
-                if page_key:
-                    block_params["pageKey"] = page_key
-
-                payload = {
-                    "jsonrpc": "2.0", "id": 1,
-                    "method": "alchemy_getAssetTransfers",
-                    "params": [block_params],
-                }
-                async with session.post(rpc, json=payload) as r:
-                    if r.status != 200:
-                        break
-                    data = await r.json()
-
-                if data.get("error"):
-                    break
-
-                transfers = (data.get("result") or {}).get("transfers") or []
-                for t in transfers:
-                    # For ERC-20, only accept the wrapped-native (WETH/WMATIC) contract
-                    if label == "WETH":
-                        contract = ((t.get("rawContract") or {}).get("address") or "").lower()
-                        if contract != weth:
-                            continue
-
-                    tx = (t.get("hash") or "").lower()
-                    if not tx:
-                        continue
-
-                    raw_val = (t.get("rawContract") or {}).get("value")
-                    val_float = 0.0
-                    if raw_val:
-                        try:
-                            val_float = int(raw_val, 16) / 1e18
-                        except (ValueError, TypeError):
-                            pass
-                    if val_float <= 0:
-                        direct_val = t.get("value")
-                        if direct_val is not None:
-                            try:
-                                val_float = float(direct_val)
-                            except (TypeError, ValueError):
-                                pass
-
-                    if val_float <= 0:
-                        continue
-
-                    key_str = f"{tx}:{direction_key}"
-                    if key_str in result:
-                        result[key_str]["amount"] += val_float
-                    else:
-                        result[key_str] = {
-                            "tx_hash": tx,
-                            "amount": val_float,
-                            "token": label,
-                            "direction": direction_key,
-                        }
-
-                page_key = (data.get("result") or {}).get("pageKey")
-                if not page_key or not transfers:
-                    break
-                await asyncio.sleep(0.05)
-
-    return result
+    legs = await asyncio.gather(
+        _fetch_payment_leg(session, chain, wallet, key, max_pages, from_block, "in", "toAddress", ["internal"], "ETH"),
+        _fetch_payment_leg(session, chain, wallet, key, max_pages, from_block, "in", "toAddress", ["erc20"], "WETH"),
+        _fetch_payment_leg(session, chain, wallet, key, max_pages, from_block, "out", "fromAddress", ["internal"], "ETH"),
+        _fetch_payment_leg(session, chain, wallet, key, max_pages, from_block, "out", "fromAddress", ["erc20"], "WETH"),
+    )
+    return _merge_payment_partials(list(legs))
 
 
 def _apply_inferred_prices(chain: str, wallet: str, payments: Dict[str, Dict[str, Any]]) -> None:
@@ -360,14 +398,13 @@ async def sync_wallet(
         # alchemy_getAssetTransfers: requires hex block number
         from_block_hex = hex(from_block_dec) if from_block_dec is not None else None
 
-        sales_data, hit_cap = await _fetch_sales(
-            session, chain, wallet, key, max_pages
+        (sales_data, hit_cap), transfers_data = await asyncio.gather(
+            _fetch_sales(session, chain, wallet, key, max_pages),
+            _fetch_asset_transfers(
+                session, chain, wallet, key, max_pages, from_block=from_block_hex
+            ),
         )
         _save_sales(chain, wallet, sales_data)
-
-        transfers_data = await _fetch_asset_transfers(
-            session, chain, wallet, key, max_pages, from_block=from_block_hex
-        )
         _save_transfers(chain, wallet, transfers_data)
 
         # Fetch ETH/WETH payment flows to infer prices for trades Alchemy getNFTSales misses
@@ -422,7 +459,9 @@ async def _fetch_sales(
             page_key = data.get("pageKey")
             if not page_key or not sales:
                 break
-            await asyncio.sleep(0.1)
+            d = _page_delay_s()
+            if d > 0:
+                await asyncio.sleep(d)
         page_key = None  # reset for next role
 
     return _dedupe_sales(all_sales), False
@@ -475,7 +514,9 @@ async def _fetch_asset_transfers(
             page_key = result.get("pageKey")
             if not page_key or not transfers:
                 break
-            await asyncio.sleep(0.1)
+            d = _page_delay_s()
+            if d > 0:
+                await asyncio.sleep(d)
         page_key = None
 
     return all_transfers

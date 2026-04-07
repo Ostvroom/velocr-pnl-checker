@@ -137,6 +137,27 @@ function getParams() {
   return { wallet, chain, days: daysNorm };
 }
 
+function saveSearchActivity(entry) {
+  const MAX_ITEMS = 25;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    const arr = Array.isArray(list) ? list : [];
+    const next = arr.filter(
+      (x) =>
+        !(
+          x.wallet?.toLowerCase() === entry.wallet?.toLowerCase() &&
+          x.chain === entry.chain &&
+          Number(x.days) === Number(entry.days)
+        ),
+    );
+    next.unshift(entry);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next.slice(0, MAX_ITEMS)));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
 function daysQuery(d) {
   if (d === 0) return "days=0";
   return `days=${encodeURIComponent(d)}`;
@@ -210,7 +231,7 @@ async function loadAll() {
   $("#dash-chain-pill").textContent = chain.toUpperCase();
 
   try {
-    const qc = `chain=${encodeURIComponent(chain)}&days=0`; // Always fetch all time
+    const qc = `chain=${encodeURIComponent(chain)}&${daysQuery(days)}`;
     const dash = await fetchJson(
       `/api/dashboard/${encodeURIComponent(wallet)}?${qc}&metadata=false&enrich_images=true`,
     );
@@ -230,7 +251,18 @@ async function loadAll() {
 
     renderTradeBox("best", pnl.best_trade, pnl.symbol || "ETH", chain);
     renderTradeBox("worst", pnl.worst_trade, pnl.symbol || "ETH", chain);
-    
+
+    const sym = pnl.symbol || "ETH";
+    saveSearchActivity({
+      wallet,
+      chain,
+      days,
+      symbol: sym,
+      trades_rows: pnl.total_completed_trades ?? 0,
+      best_trade_profit: pnl.best_trade?.profit,
+      worst_trade_profit: pnl.worst_trade?.profit,
+    });
+
     setLoading(false);
   } catch (e) {
     setError(e.message || String(e));

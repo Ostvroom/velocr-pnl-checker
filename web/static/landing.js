@@ -24,10 +24,21 @@ function loadActivity() {
 function saveActivity(entry) {
   const list = loadActivity().filter(
     (x) =>
-      !(x.wallet?.toLowerCase() === entry.wallet?.toLowerCase() && x.chain === entry.chain && x.days === entry.days),
+      !(
+        x.wallet?.toLowerCase() === entry.wallet?.toLowerCase() &&
+        x.chain === entry.chain &&
+        Number(x.days) === Number(entry.days)
+      ),
   );
   list.unshift(entry);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(list.slice(0, MAX_ITEMS)));
+}
+
+function formatTradeProfit(v, sym) {
+  if (v === undefined || v === null || !Number.isFinite(Number(v))) return "—";
+  const n = Number(v);
+  const sign = n >= 0 ? "+" : "";
+  return `${sign}${n.toFixed(4)} ${sym}`;
 }
 
 function daysLabel(d) {
@@ -40,17 +51,29 @@ function renderActivity() {
   const items = loadActivity();
   if (!items.length) {
     ul.innerHTML =
-      '<li class="kol-activity-empty">No searches yet. Enter a wallet above to open the dashboard.</li>';
+      '<li class="kol-activity-empty kol-activity-empty--full">No dossiers yet. Open the dashboard from a wallet search — top / worst trades and row counts are saved here for that window.</li>';
     return;
   }
-  // Avoid scrollbars on the landing page: show a small, fixed set.
   const shown = items.slice(0, 6);
   ul.innerHTML = shown
     .map((x) => {
-      const net = Number(x.net_trades);
-      const netStr = Number.isFinite(net)
-        ? `${net >= 0 ? "+" : ""}${net.toFixed(4)} ${x.symbol || "ETH"}`
-        : "—";
+      const sym = x.symbol || "ETH";
+      const best = x.best_trade_profit;
+      const worst = x.worst_trade_profit;
+      const bestStr = formatTradeProfit(best, sym);
+      const worstStr = formatTradeProfit(worst, sym);
+      const bestCls =
+        best === undefined || best === null || !Number.isFinite(Number(best))
+          ? ""
+          : Number(best) >= 0
+            ? " pos"
+            : " neg";
+      const worstCls =
+        worst === undefined || worst === null || !Number.isFinite(Number(worst))
+          ? ""
+          : Number(worst) >= 0
+            ? " pos"
+            : " neg";
       const rows = x.trades_rows != null ? `${x.trades_rows} mkt rows` : "";
       const q = new URLSearchParams({
         wallet: x.wallet,
@@ -59,11 +82,12 @@ function renderActivity() {
       });
       return `<li class="kol-activity-item">
         <a class="kol-activity-link" href="/dashboard?${q.toString()}">
-          <span class="kol-act-wallet">${shortAddr(x.wallet)}</span>
-          <span class="kol-act-chain">${(x.chain || "eth").toUpperCase()}</span>
-          <span class="kol-act-range">${daysLabel(x.days)}</span>
-          <span class="kol-act-net ${net >= 0 ? "pos" : "neg"}">${netStr} net</span>
-          <span class="kol-act-meta">${rows}</span>
+          <span class="kol-act-cell kol-act-wallet" title="${x.wallet}">${shortAddr(x.wallet)}</span>
+          <span class="kol-act-cell kol-act-chain">${(x.chain || "eth").toUpperCase()}</span>
+          <span class="kol-act-cell kol-act-range">${daysLabel(x.days)}</span>
+          <span class="kol-act-cell kol-act-top${bestCls}">${bestStr}</span>
+          <span class="kol-act-cell kol-act-worst${worstCls}">${worstStr}</span>
+          <span class="kol-act-cell kol-act-meta">${rows || "—"}</span>
         </a>
       </li>`;
     })

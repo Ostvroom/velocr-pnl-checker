@@ -50,7 +50,7 @@
       <div class="intel-terminal" aria-label="System status">
         <div class="intel-line">
           <span class="intel-dot ok"></span>
-          <span class="intel-typed" style="--tw: 26ch; --td: 0.0s">HOST ONLINE · MORALIS</span>
+          <span class="intel-typed" style="--tw: 32ch; --td: 0.0s">HOST ONLINE · ALCHEMY INDEX</span>
         </div>
         <div class="intel-line">
           <span class="intel-dot ok"></span>
@@ -63,47 +63,70 @@
       </div>
     </div>
 
-    <form class="kol-form" id="landing-form" autocomplete="off">
-      <div class="kol-search-row">
-        <input
-          type="text"
-          id="landing-wallet"
-          name="wallet"
-          placeholder="Enter wallet address"
-          spellcheck="false"
-          maxlength="42"
-        />
-        <button type="submit" class="kol-search-btn" aria-label="Search" title="Search">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        </button>
-      </div>
-      <div class="kol-filters-row">
-        <select id="landing-chain" aria-label="Blockchain">
-          <option value="eth" selected>Ethereum</option>
-          <option value="base">Base</option>
-          <option value="polygon">Polygon</option>
-          <option value="arbitrum">Arbitrum</option>
-          <option value="optimism">Optimism</option>
-        </select>
-        <select id="landing-range" aria-label="Time range">
-          <option value="7">Last 7 days</option>
-          <option value="30">Last 30 days</option>
-          <option value="90" selected>Last 90 days</option>
-          <option value="365">Last 365 days</option>
-          <option value="0">All time</option>
-        </select>
-      </div>
-    </form>
+    <div class="kol-dossier">
+      <div class="kol-dossier-inner">
+        <div class="kol-dossier-label">
+          <span class="kol-dossier-tag">QUERY</span>
+          <span class="kol-dossier-rule" aria-hidden="true"></span>
+          <span class="kol-dossier-id">NEW TARGET</span>
+        </div>
 
-    <section class="kol-activity-section" aria-labelledby="activity-heading">
-      <h2 id="activity-heading" class="kol-activity-title">Search activity</h2>
-      <div class="kol-activity-box">
-        <ul class="kol-activity-list" id="activity-list"></ul>
+        <form class="kol-form" id="landing-form" autocomplete="off">
+          <div class="kol-search-row">
+            <input
+              type="text"
+              id="landing-wallet"
+              name="wallet"
+              placeholder="0x… wallet address"
+              spellcheck="false"
+              maxlength="42"
+            />
+            <button type="submit" class="kol-search-btn" aria-label="Search" title="Search">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </button>
+          </div>
+          <div class="kol-filters-row">
+            <select id="landing-chain" aria-label="Blockchain">
+              <option value="eth" selected>Ethereum</option>
+              <option value="base">Base</option>
+              <option value="polygon">Polygon</option>
+              <option value="arbitrum">Arbitrum</option>
+              <option value="optimism">Optimism</option>
+            </select>
+            <select id="landing-range" aria-label="Time range">
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="90" selected>Last 90 days</option>
+              <option value="365">Last 365 days</option>
+              <option value="0">All time</option>
+            </select>
+          </div>
+        </form>
+
+        <div class="kol-dossier-divider" aria-hidden="true"></div>
+
+        <section class="kol-activity-section" aria-labelledby="activity-heading">
+          <div class="kol-activity-heading-row">
+            <h2 id="activity-heading" class="kol-activity-title">Recent dossiers</h2>
+            <p class="kol-activity-sub">Saved from your dashboard visits — top / worst trade use the same time window as each search.</p>
+          </div>
+          <div class="kol-activity-box">
+            <div class="kol-activity-head" aria-hidden="true">
+              <span>Wallet</span>
+              <span>Chain</span>
+              <span>Window</span>
+              <span>Top trade</span>
+              <span>Worst trade</span>
+              <span>Data</span>
+            </div>
+            <ul class="kol-activity-list" id="activity-list"></ul>
+          </div>
+        </section>
       </div>
-    </section>
+    </div>
   </main>
 
-  <footer class="kol-foot">NFT PNL Checker · VELCOR3 · Moralis data · Not financial advice</footer>
+  <footer class="kol-foot">NFT PNL Checker · VELCOR3 · Alchemy / on-chain index · Not financial advice</footer>
 
   <a
     class="site-x-corner"
