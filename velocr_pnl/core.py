@@ -34,7 +34,6 @@ def _api_key() -> str:
     return (
         (os.getenv("ALCHEMY_API_KEY") or "").strip()
         or (os.getenv("SIMPLEHASH_API_KEY") or "").strip()
-        or (os.getenv("MORALIS_API_KEY") or "").strip()
     )
 
 def _truthy_env(name: str) -> bool:
@@ -304,6 +303,9 @@ async def _pipeline(
     best_trade: Optional[float] = None
     worst_trade: Optional[float] = None
 
+    period_unrealized_cost = 0.0
+    period_unrealized_contracts: Dict[str, int] = {}
+
     def sanitize_name(n):
         if not n: return ""
         # If name is just ????? or contains too many ? relative to length, it's likely garbled
@@ -362,6 +364,9 @@ async def _pipeline(
                         "net_native": 0.0, "realized_pnl": 0.0,
                     }
                 buckets[contract_addr]["realized_pnl"] += pnl_event
+            else:
+                period_unrealized_cost += price
+                period_unrealized_contracts[contract_addr] = period_unrealized_contracts.get(contract_addr, 0) + 1
 
             if r["event_type"] == "mint":
                 mint_count += 1
@@ -422,11 +427,20 @@ async def _pipeline(
             "token_id": token_id,
         })
 
-    # 5. Live Unrealized (Still using API for current floor speed)
-    unreal, floor, holds_n, u_err = 0.0, 0.0, 0, None
-    if not skip_unrealized:
-        async with aiohttp.ClientSession() as session:
-            unreal, floor, holds_n, u_err = await _calc_unrealized(session, base, wallet_address, chain_key, max_hold_pages=3)
+    # 5. Live Unrealized (Using API for current floor speed, filtered by time period)
+    period_floor = 0.0
+    u_err = None
+    holds_n = sum(period_unrealized_contracts.values())
+    if not skip_unrealized and period_unrealized_contracts:
+        sem = asyncio.Semaphore(6)
+        async def _get_fp(c, q):
+            nonlocal period_floor
+            async with aiohttp.ClientSession() as session:
+                async with sem:
+                    fp = await _fetch_floor(session, base, c, chain_key)
+            period_floor += fp * q
+        
+        await asyncio.gather(*[_get_fp(c, q) for c, q in period_unrealized_contracts.items()], return_exceptions=True)
 
     total_cost = buy_vol + mint_spend
     net = sell_vol - total_cost
@@ -459,8 +473,8 @@ async def _pipeline(
         "realized_pnl_native": realized_pnl_native,
         "best_trade": best_trade,
         "worst_trade": worst_trade,
-        "unrealized_pnl_native": floor - total_cost if not u_err else None,
-        "holdings_floor_native": floor if not u_err else None,
+        "unrealized_pnl_native": period_floor - period_unrealized_cost if not u_err else None,
+        "holdings_floor_native": period_floor if not u_err else None,
         "holdings_nft_count": holds_n if not u_err else None,
         "pnl_percent": pct,
         "trades_rows": len(normalized),
