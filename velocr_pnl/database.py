@@ -95,12 +95,21 @@ def init_db():
 
 
 def _migrate_sales_columns(conn: sqlite3.Connection) -> None:
-    """Add buyer/seller split columns for correct PnL (Alchemy fee model)."""
+    """Add buyer/seller split columns and contract/token lookup columns."""
     cols = {r[1] for r in conn.execute("PRAGMA table_info(sales)").fetchall()}
     if "buyer_total_native" not in cols:
         conn.execute("ALTER TABLE sales ADD COLUMN buyer_total_native REAL")
     if "seller_receipt_native" not in cols:
         conn.execute("ALTER TABLE sales ADD COLUMN seller_receipt_native REAL")
+    if "contract_address" not in cols:
+        conn.execute("ALTER TABLE sales ADD COLUMN contract_address TEXT")
+    if "token_id" not in cols:
+        conn.execute("ALTER TABLE sales ADD COLUMN token_id TEXT")
+    # Index for the new join strategy (tx_hash + contract + token_id)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sales_contract_token "
+        "ON sales(chain, tx_hash, contract_address, token_id);"
+    )
 
 
 def _migrate_transfers_columns(conn: sqlite3.Connection) -> None:

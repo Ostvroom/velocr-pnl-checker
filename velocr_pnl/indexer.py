@@ -500,9 +500,9 @@ def _save_sales(chain: str, wallet: str, sales: List[dict]):
                 """
                 INSERT OR REPLACE INTO sales (
                     chain, tx_hash, log_index, price_native, buyer_total_native, seller_receipt_native,
-                    payment_token, marketplace, buyer, seller
+                    payment_token, marketplace, buyer, seller, contract_address, token_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     chain,
@@ -515,6 +515,8 @@ def _save_sales(chain: str, wallet: str, sales: List[dict]):
                     s.get("marketplace"),
                     (s.get("buyerAddress") or "").lower(),
                     (s.get("sellerAddress") or "").lower(),
+                    (s.get("contractAddress") or "").lower(),
+                    _parse_token_id(s.get("tokenId")),
                 ),
             )
 

@@ -217,7 +217,10 @@ async def _pipeline(
     # 3. Pull Data from Indexer
     conn = database.get_db_connection()
     try:
-        # Fetch Sales joined with transfers
+        # Fetch Sales joined with transfers.
+        # NOTE: We join sales by tx_hash + contract_address + token_id (NOT log_index)
+        # because alchemy_getAssetTransfers and getNFTSales use different log indexing schemes,
+        # which causes log_index-based joins to silently fail and return NULL prices.
         rows = conn.execute(
             """
             SELECT t.*,
@@ -233,9 +236,12 @@ async def _pipeline(
                    c.image_url AS collection_image
             FROM transfers t
             LEFT JOIN sales s
-              ON t.chain = s.chain AND t.tx_hash = s.tx_hash AND t.log_index = s.log_index
+              ON t.chain = s.chain
+             AND t.tx_hash = s.tx_hash
+             AND LOWER(t.contract_address) = LOWER(s.contract_address)
+             AND t.token_id = s.token_id
             LEFT JOIN collections c
-              ON t.chain = c.chain AND t.contract_address = c.contract_address
+              ON t.chain = c.chain AND LOWER(t.contract_address) = LOWER(c.contract_address)
             WHERE t.chain = ? AND t.wallet_address = ?
             ORDER BY t.block_number DESC
             """,
