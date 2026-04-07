@@ -22,7 +22,7 @@ function shortAddr(a) {
 function formatEth(n) {
   const x = Number(n);
   if (!Number.isFinite(x)) return "—";
-  if (x === 0) return "—";
+  if (x === 0) return "0";
   if (Math.abs(x) < 0.0001) return x.toExponential(2);
   return x.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
