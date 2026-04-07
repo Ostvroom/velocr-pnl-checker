@@ -240,10 +240,8 @@ function renderStats(pnl) {
       : "—";
   const rows = [
     ["Net", `${formatEth(pnl.net_trades)} ${sym} (${pct})`],
-    ["Unrealized PnL (est.)", unreal],
     ["Sell volume", `${formatEth(pnl.est_sell_volume)} ${sym}`],
     ["Buy volume", `${formatEth(pnl.est_buy_volume)} ${sym}`],
-    ["Mint spend (est.)", `${formatEth(pnl.mint_spend)} ${sym}`],
     ["Buys", String(pnl.bought_trades ?? 0)],
     ["Sells", String(pnl.sold_trades ?? 0)],
     [
