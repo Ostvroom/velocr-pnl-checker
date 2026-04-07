@@ -1921,6 +1921,11 @@ main {
 .dash-tok-name {
   font-weight: 600;
   font-size: 0.88rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 13ch;
 }
 
 .dash-tok-net {
