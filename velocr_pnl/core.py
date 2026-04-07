@@ -62,35 +62,41 @@ _floor_cache: Dict[Tuple[str, str], Tuple[float, float]] = {}
 _floor_lock = asyncio.Lock()
 
 async def _fetch_floor(session: aiohttp.ClientSession, base: str, contract: str, chain_key: str) -> float:
-    # Check DB first for recently updated floor
+    # Check DB first for recently updated floor (1 hour TTL)
     conn = database.get_db_connection()
     try:
         row = conn.execute(
             "SELECT floor_price_native, floor_updated_at FROM collections WHERE chain = ? AND contract_address = ? LIMIT 1",
             (chain_key, contract.lower())
         ).fetchone()
-        if row and row['floor_updated_at'] > (time.time() - 3600):
-            return row['floor_price_native'] or 0.0
+        if row and row['floor_updated_at'] and row['floor_updated_at'] > (time.time() - 3600):
+            return float(row['floor_price_native'] or 0.0)
     finally:
         conn.close()
 
-    # Fallback to Alchemy API (and cache in memory for now)
-    url = f"{base}/getFloorPrice"
-    try:
-        async with session.get(url, params={"contractAddress": contract}, timeout=aiohttp.ClientTimeout(total=15)) as r:
-            if r.status >= 400: return 0.0
-            data = await r.json()
-    except Exception: return 0.0
-
+    # Alchemy NFT API v3 — getFloorPrice was deprecated; use getContractMetadata
+    # openSeaMetadata.floorPrice gives the current floor in ETH
+    url = f"{base}/getContractMetadata"
     best = 0.0
-    for mkt_data in data.values():
-        if isinstance(mkt_data, dict):
-            try:
-                v = float(mkt_data.get("floorPrice") or 0)
-                if v > best: best = v
-            except: pass
+    try:
+        async with session.get(
+            url,
+            params={"contractAddress": contract},
+            timeout=aiohttp.ClientTimeout(total=10),
+        ) as r:
+            if r.status < 400:
+                data = await r.json()
+                os_meta = data.get("openSeaMetadata") or {}
+                fp = os_meta.get("floorPrice")
+                if fp is not None:
+                    try:
+                        best = float(fp)
+                    except (TypeError, ValueError):
+                        best = 0.0
+    except Exception:
+        best = 0.0
 
-    # Update DB with new floor
+    # Cache in DB
     conn = database.get_db_connection()
     try:
         conn.execute("""
@@ -427,21 +433,30 @@ async def _pipeline(
             "token_id": token_id,
         })
 
-    # 5. Live Unrealized (Using API for current floor speed, filtered by time period)
+    # 5. Live Unrealized — fetch floor for top 30 contracts by holdings count (cap to avoid timeout)
     period_floor = 0.0
     u_err = None
     holds_n = sum(period_unrealized_contracts.values())
-    print(f"[unrealized] days={moralis_days} | unmatched_buys={holds_n} | contracts={len(period_unrealized_contracts)} | period_cost={period_unrealized_cost:.4f}")
-    if not skip_unrealized and period_unrealized_contracts:
-        sem = asyncio.Semaphore(6)
+    # Sort by qty desc, take top 30 to keep response fast
+    top_contracts = sorted(period_unrealized_contracts.items(), key=lambda x: x[1], reverse=True)[:30]
+    print(f"[unrealized] days={moralis_days} | unmatched_buys={holds_n} | contracts={len(period_unrealized_contracts)} (fetching top {len(top_contracts)}) | period_cost={period_unrealized_cost:.4f}")
+    if not skip_unrealized and top_contracts:
+        sem = asyncio.Semaphore(5)
         async with aiohttp.ClientSession() as fp_session:
             async def _get_fp(c, q):
                 nonlocal period_floor
                 async with sem:
                     fp = await _fetch_floor(fp_session, base, c, chain_key)
                 period_floor += fp * q
-            await asyncio.gather(*[_get_fp(c, q) for c, q in period_unrealized_contracts.items()], return_exceptions=True)
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*[_get_fp(c, q) for c, q in top_contracts], return_exceptions=True),
+                    timeout=20.0,
+                )
+            except asyncio.TimeoutError:
+                print("[unrealized] floor fetch timed out after 20s, using partial results")
     print(f"[unrealized] period_floor={period_floor:.4f} | unrealized={period_floor - period_unrealized_cost:.4f}")
+
 
     total_cost = buy_vol + mint_spend
     net = sell_vol - total_cost
