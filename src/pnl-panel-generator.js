@@ -272,11 +272,19 @@ class PnlPanelGenerator {
     const traderY = 859.5;  // up 5.5px total
     const rightColFont = '22px "Space Grotesk"'; // unified size + weight for all three rows
 
-    drawText(data.date || new Date().toLocaleDateString('en-GB'), rightColX, dateY, {
+    const generatedAt = new Date();
+    const fallbackDate = generatedAt.toLocaleDateString('en-GB', { timeZone: 'UTC' });
+    const fallbackTime = generatedAt.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC'
+    }) + ' UTC';
+
+    drawText(data.date || fallbackDate, rightColX, dateY, {
       font: rightColFont,
       color: COLORS.white
     });
-    drawText(data.time || new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' UTC', rightColX, timeY, {
+    drawText(data.time || fallbackTime, rightColX, timeY, {
       font: rightColFont,
       color: COLORS.white
     });

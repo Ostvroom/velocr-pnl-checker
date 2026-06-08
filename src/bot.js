@@ -1272,21 +1272,13 @@ class DiscordBot {
 
     console.log(`[PnL] ${collection}: BOUGHT ${totalBought.toFixed(4)} + GAS ${totalBuyGas.toFixed(4)} = ${(totalBought + totalBuyGas).toFixed(4)} | SOLD ${totalSold.toFixed(4)} | HOLDING ${totalHolding.toFixed(4)} (${holdingCount}) | P&L ${totalProfit.toFixed(4)} ETH | ROI ${isFinite(totalRoi) ? totalRoi.toFixed(1) + '%' : '∞'} | ${transferredOutCount} moved out`);
 
-    // Find earliest mint/buy time across all NFTs
-    let earliestBuyTime = null;
-    for (const r of results) {
-      if (r.buyTime) {
-        const t = new Date(r.buyTime);
-        if (!earliestBuyTime || t < earliestBuyTime) {
-          earliestBuyTime = t;
-        }
-      }
-    }
-    const now = new Date();
-    const mintDate = earliestBuyTime ? earliestBuyTime.toLocaleDateString('en-GB') : now.toLocaleDateString('en-GB');
-    const mintTime = earliestBuyTime
-      ? earliestBuyTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' UTC'
-      : now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' UTC';
+    const generatedAt = new Date();
+    const generatedDate = generatedAt.toLocaleDateString('en-GB', { timeZone: 'UTC' });
+    const generatedTime = generatedAt.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'UTC'
+    }) + ' UTC';
 
     // Prepare data for image generator
     const panelData = {
@@ -1298,8 +1290,8 @@ class DiscordBot {
       totalProfit: totalProfit,
       totalRoi: totalRoi,
       transferredCount: transferredCount,  // NFTs received as gifts/transfers
-      date: mintDate,
-      time: mintTime,
+      date: generatedDate,
+      time: generatedTime,
       trader: interaction.user.username.substring(0, 15)
     };
 
