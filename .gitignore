@@ -1,0 +1,5 @@
+node_modules/
+.env
+output/
+data/opensea-key.json
+data/user-wallets.json

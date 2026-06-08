@@ -1,0 +1,37 @@
+{
+  "name": "discord-x-image-bot",
+  "version": "1.0.0",
+  "description": "Discord bot that generates images from templates using X profile data",
+  "main": "src/bot.js",
+  "scripts": {
+    "start": "node src/bot.js",
+    "dev": "nodemon src/bot.js",
+    "setup": "node scripts/setup.js",
+    "create-template": "node scripts/create-template.js",
+    "install-browser": "npx puppeteer browsers install chrome"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "x",
+    "twitter",
+    "image",
+    "generator"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "@google/generative-ai": "^0.1.3",
+    "agent-twitter-client": "^0.0.18",
+    "axios": "^1.6.2",
+    "canvas": "^3.2.3",
+    "cheerio": "^1.0.0-rc.12",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1",
+    "puppeteer": "^24.36.1",
+    "twitter-api-v2": "^1.29.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
