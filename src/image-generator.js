@@ -1,19 +1,8 @@
-const { createCanvas, loadImage, registerFont } = require('canvas');
+require('./fonts'); // registers fonts before any canvas is created
+const { createCanvas, loadImage } = require('canvas');
 const fs = require('fs').promises;
 const path = require('path');
 const config = require('./config');
-
-try {
-  registerFont(path.join(__dirname, '..', 'fonts', 'ChakraPetch-SemiBold.ttf'), { family: 'Chakra Petch', weight: '600' });
-} catch (e) {
-  console.warn('Failed to register Chakra Petch font:', e);
-}
-
-try {
-  registerFont(path.join(__dirname, '..', 'fonts', 'Rajdhani-SemiBold.ttf'), { family: 'Rajdhani', weight: '600' });
-} catch (e) {
-  console.warn('Failed to register Rajdhani font:', e);
-}
 
 class ImageGenerator {
   constructor() {
@@ -88,7 +77,7 @@ class ImageGenerator {
 
       const username = `@${userData.username}`;
       ctx.fillStyle = '#c69c6c'; // Exact gold/brown color from template
-      ctx.font = '600 38px "Chakra Petch"';
+      ctx.font = '38px "Chakra Petch SemiBold"';
       ctx.textAlign = 'left';
 
       // "Fat Gras by 10%": Adding a subtle stroke to thicken the script font

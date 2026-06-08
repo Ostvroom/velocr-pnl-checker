@@ -1,28 +1,8 @@
-const { createCanvas, loadImage, registerFont } = require('canvas');
+require('./fonts'); // registers fonts before any canvas is created
+const { createCanvas, loadImage } = require('canvas');
 const fs = require('fs').promises;
 const path = require('path');
 const axios = require('axios');
-
-// Register each font file under its own UNIQUE family name (no weight matching).
-// This bypasses Pango's flaky weight-based font selection on Linux which silently
-// falls back to system fonts when a weight doesn't match exactly.
-const fonts = [
-  { file: 'ChakraPetch-SemiBold.ttf', family: 'ChakraPetchSB' },
-  { file: 'Rajdhani-Regular.ttf',     family: 'RajdhaniReg' },
-  { file: 'Rajdhani-SemiBold.ttf',    family: 'RajdhaniSB' },
-  { file: 'Rajdhani-Bold.ttf',        family: 'RajdhaniBold' },
-];
-for (const f of fonts) {
-  try {
-    // weight 'normal' matches the default CSS font weight (400), preventing Cairo
-    // from rendering broken/faint text when CSS requests a weight that doesn't
-    // match the TTF's internal weight metadata.
-    registerFont(path.join(__dirname, '..', 'fonts', f.file), { family: f.family, weight: 'normal', style: 'normal' });
-    console.log(`✓ Registered font: ${f.family} (${f.file})`);
-  } catch (e) {
-    console.warn(`✗ Font ${f.file} not registered:`, e.message);
-  }
-}
 
 class PnlPanelGenerator {
   constructor() {
@@ -99,7 +79,7 @@ class PnlPanelGenerator {
     // ─── Text styling helpers ───
     const drawText = (text, x, y, options = {}) => {
       const {
-        font = '32px "RajdhaniSB"',
+        font = '32px "Rajdhani SemiBold"',
         color = '#FFFFFF',
         align = 'left',
         shadow = false
@@ -133,10 +113,10 @@ class PnlPanelGenerator {
     let collectionFontSize = 64;
     const maxCollectionWidth = 560; // keeps text clear of the circular image on the right
     const collectionText = data.collection.toUpperCase();
-    ctx.font = `${collectionFontSize}px "ChakraPetchSB"`;
+    ctx.font = `${collectionFontSize}px "Chakra Petch SemiBold"`;
     while (ctx.measureText(collectionText).width > maxCollectionWidth && collectionFontSize > 24) {
       collectionFontSize -= 4;
-      ctx.font = `${collectionFontSize}px "ChakraPetchSB"`;
+      ctx.font = `${collectionFontSize}px "Chakra Petch SemiBold"`;
     }
     // If still too wide at min size, truncate with ellipsis
     let displayCollectionText = collectionText;
@@ -148,7 +128,7 @@ class PnlPanelGenerator {
     }
     // x=67: pixel-scanned left edge of "COLLECTION" label in template — name aligns under it
     drawText(displayCollectionText, 67, 270, {
-      font: `${collectionFontSize}px "ChakraPetchSB"`,
+      font: `${collectionFontSize}px "Chakra Petch SemiBold"`,
       color: COLORS.white
     });
 
@@ -161,18 +141,18 @@ class PnlPanelGenerator {
       ctx.textBaseline = 'middle';
 
       // Bold number
-      ctx.font = '38px "RajdhaniBold"';
+      ctx.font = 'bold 38px "Rajdhani"';
       ctx.fillStyle = COLORS.white;
       ctx.fillText(numText, x, yNum);
       const numW = ctx.measureText(numText).width;
 
       // Suffix: regular weight, same y — real font registered so metrics are consistent
-      ctx.font = '24px "RajdhaniSB"';
+      ctx.font = '24px "Rajdhani SemiBold"';
       ctx.fillStyle = COLORS.gray;
       ctx.fillText(' ETH', x + numW, yNum);
 
       // USD sub-label
-      ctx.font = '18px "RajdhaniSB"';
+      ctx.font = '18px "Rajdhani SemiBold"';
       ctx.fillStyle = COLORS.gray;
       ctx.fillText(usdText, x, yUsd);
     };
@@ -192,12 +172,12 @@ class PnlPanelGenerator {
     // 3. BOUGHT value — aligned with cart icon
     const allTransferred = (data.transferredCount || 0) > 0 && (data.totalBoughtEth || 0) === 0;
     if (allTransferred) {
-      ctx.font = '26px "RajdhaniBold"';
+      ctx.font = 'bold 26px "Rajdhani"';
       ctx.fillStyle = COLORS.gray;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText('TRANSFERRED', X_BOUGHT, Y_BOUGHT);
-      ctx.font = '16px "RajdhaniSB"';
+      ctx.font = '16px "Rajdhani SemiBold"';
       ctx.fillText('no payment on-chain', X_BOUGHT, Y_BOUGHT + 45);
     } else {
       drawMetric(data.totalBoughtEth || 0, X_BOUGHT, Y_BOUGHT, Y_BOUGHT + 45);
@@ -215,11 +195,11 @@ class PnlPanelGenerator {
 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.font = `${countFont}px "RajdhaniBold"`;
+    ctx.font = `bold ${countFont}px "Rajdhani"`;
     ctx.fillStyle = COLORS.white;
     ctx.fillText(countStr, HOLD_X, holdingY);
     const countW = ctx.measureText(countStr).width;
-    ctx.font = `${nftFont}px "RajdhaniSB"`;
+    ctx.font = `${nftFont}px "Rajdhani SemiBold"`;
     ctx.fillStyle = COLORS.gray;
     ctx.fillText(' NFTs', HOLD_X + countW, holdingY);
 
@@ -227,26 +207,26 @@ class PnlPanelGenerator {
     if (holdingCount > 0) {
       if (holdingEth > 0) {
         const hEthText = this.formatK(holdingEth);
-        ctx.font = '20px "RajdhaniBold"';
+        ctx.font = 'bold 20px "Rajdhani"';
         ctx.fillStyle = COLORS.white;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillText(hEthText, HOLD_X, holdingY + 37);
         const hEthW = ctx.measureText(hEthText).width;
-        ctx.font = '20px "RajdhaniSB"';
+        ctx.font = '20px "Rajdhani SemiBold"';
         ctx.fillStyle = COLORS.gray;
         ctx.fillText(' ETH', HOLD_X + hEthW, holdingY + 37);
 
-        ctx.font = '14px "RajdhaniSB"';
+        ctx.font = '14px "Rajdhani SemiBold"';
         ctx.fillStyle = COLORS.gray;
         ctx.fillText(`≈ ${this.formatUsd(holdingEth, ethPrice)}`, HOLD_X, holdingY + 62);
       } else {
-        ctx.font = '16px "RajdhaniBold"';
+        ctx.font = 'bold 16px "Rajdhani"';
         ctx.fillStyle = COLORS.gray;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillText('N/A', HOLD_X, holdingY + 37);
-        ctx.font = '12px "RajdhaniSB"';
+        ctx.font = '12px "Rajdhani SemiBold"';
         ctx.fillText('No floor data', HOLD_X, holdingY + 60);
       }
     }
@@ -258,7 +238,7 @@ class PnlPanelGenerator {
     const profitSign = data.totalProfit >= 0 ? '+' : '-';
     const profitText = `${profitSign}${this.formatUsd(Math.abs(data.totalProfit), ethPrice)}`;
     drawText(profitText, 225, 780, {
-      font: '58px "RajdhaniBold"',
+      font: 'bold 58px "Rajdhani"',
       color: profitColor
     });
 
@@ -273,13 +253,13 @@ class PnlPanelGenerator {
     const roiColor = isTransferred ? COLORS.gray : profitColor;
     const maxRoiWidth = 220;
     let roiFontSize = 58; // match TOTAL PROFIT/LOSS size
-    ctx.font = `${roiFontSize}px "RajdhaniBold"`;
+    ctx.font = `bold ${roiFontSize}px "Rajdhani"`;
     while (ctx.measureText(roiText).width > maxRoiWidth && roiFontSize > 28) {
       roiFontSize -= 4;
-      ctx.font = `${roiFontSize}px "RajdhaniBold"`;
+      ctx.font = `bold ${roiFontSize}px "Rajdhani"`;
     }
     drawText(roiText, 950, 780, {
-      font: `${roiFontSize}px "RajdhaniBold"`,
+      font: `bold ${roiFontSize}px "Rajdhani"`,
       color: roiColor
     });
 
@@ -290,7 +270,7 @@ class PnlPanelGenerator {
     const dateY   = 700;    // up 5px total
     const timeY   = 775;
     const traderY = 859.5;  // up 5.5px total
-    const rightColFont = '22px "RajdhaniSB"'; // unified size + weight for all three rows
+    const rightColFont = '22px "Rajdhani SemiBold"'; // unified size + weight for all three rows
 
     drawText(data.date || new Date().toLocaleDateString('en-GB'), rightColX, dateY, {
       font: rightColFont,

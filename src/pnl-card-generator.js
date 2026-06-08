@@ -1,24 +1,9 @@
-const { createCanvas, loadImage, registerFont } = require('canvas');
+require('./fonts'); // registers fonts before any canvas is created
+const { createCanvas, loadImage } = require('canvas');
 const fs = require('fs').promises;
 const path = require('path');
 const axios = require('axios');
 const config = require('./config');
-
-// Register under the same unique family names as the panel generator,
-// with weight: normal so they match the CSS default weight.
-const cardFonts = [
-  { file: 'ChakraPetch-SemiBold.ttf', family: 'ChakraPetchSB' },
-  { file: 'Rajdhani-Regular.ttf',     family: 'RajdhaniReg' },
-  { file: 'Rajdhani-SemiBold.ttf',    family: 'RajdhaniSB' },
-  { file: 'Rajdhani-Bold.ttf',        family: 'RajdhaniBold' },
-];
-for (const f of cardFonts) {
-  try {
-    registerFont(path.join(__dirname, '..', 'fonts', f.file), { family: f.family, weight: 'normal', style: 'normal' });
-  } catch (e) {
-    console.warn(`Failed to register ${f.file}:`, e.message);
-  }
-}
 
 class PnlCardGenerator {
   constructor() {
@@ -242,14 +227,14 @@ class PnlCardGenerator {
     const startY = 100;
 
     // "PnL CARD" label
-    ctx.font = '600 22px "Chakra Petch", sans-serif';
+    ctx.font = '22px "Chakra Petch SemiBold", sans-serif';
     ctx.fillStyle = '#8b7355';
     ctx.textAlign = 'left';
     ctx.fillText('PnL CARD', startX, startY);
 
     // Mode badge
     const modeText = mode === 'unrealized' ? 'UNREALIZED' : mode === 'realized' ? 'REALIZED' : 'MANUAL';
-    ctx.font = '600 11px "Rajdhani", sans-serif';
+    ctx.font = '11px "Rajdhani SemiBold", sans-serif';
     const badgeW = ctx.measureText(modeText).width + 24;
     const badgeX = startX + ctx.measureText('PnL CARD').width + 20;
     const badgeY = startY - 18;
@@ -274,7 +259,7 @@ class PnlCardGenerator {
     ctx.fillText(modeText, badgeX + 12, badgeY + 14);
 
     // Token name
-    ctx.font = '600 46px "Chakra Petch", sans-serif';
+    ctx.font = '46px "Chakra Petch SemiBold", sans-serif';
     ctx.fillStyle = '#5a3e2b';
     ctx.textAlign = 'left';
     ctx.fillText(name, startX, startY + 65);
@@ -310,7 +295,7 @@ class PnlCardGenerator {
       ctx.stroke();
       ctx.restore();
 
-      ctx.font = 'bold 13px "Rajdhani", sans-serif';
+      ctx.font = '13px "Rajdhani SemiBold", sans-serif';
       ctx.fillStyle = '#a08060';
       ctx.textAlign = 'left';
       ctx.fillText(label, x + 18, y + 28);
@@ -319,13 +304,13 @@ class PnlCardGenerator {
         ctx.save();
         ctx.shadowColor = customColor || accentColor;
         ctx.shadowBlur = 20;
-        ctx.font = 'bold 28px "Rajdhani", sans-serif';
+        ctx.font = '28px "Rajdhani SemiBold", sans-serif';
         ctx.fillStyle = customColor || accentColor;
         ctx.textAlign = 'left';
         ctx.fillText(value, x + 18, y + 65);
         ctx.restore();
       } else {
-        ctx.font = 'bold 22px "Rajdhani", sans-serif';
+        ctx.font = '22px "Rajdhani SemiBold", sans-serif';
         ctx.fillStyle = '#5a3e2b';
         ctx.textAlign = 'left';
         ctx.fillText(value, x + 18, y + 62);
@@ -351,14 +336,14 @@ class PnlCardGenerator {
   }
 
   drawWallet(ctx, wallet, width, height) {
-    ctx.font = '14px "Rajdhani", sans-serif';
+    ctx.font = '14px "Rajdhani SemiBold", sans-serif';
     ctx.fillStyle = '#a08060';
     ctx.textAlign = 'left';
     ctx.fillText(`Wallet: ${wallet}`, 500, height - 70);
   }
 
   drawBranding(ctx, width, height, mode) {
-    ctx.font = '600 16px "Chakra Petch", sans-serif';
+    ctx.font = '16px "Chakra Petch SemiBold", sans-serif';
     ctx.fillStyle = 'rgba(90, 62, 43, 0.15)';
     ctx.textAlign = 'left';
     ctx.fillText('VELIST', 50, height - 35);
@@ -372,7 +357,7 @@ class PnlCardGenerator {
 
     // Auto badge if not manual
     if (mode !== 'manual') {
-      ctx.font = 'bold 11px "Rajdhani", sans-serif';
+      ctx.font = '11px "Rajdhani SemiBold", sans-serif';
       ctx.fillStyle = 'rgba(90, 62, 43, 0.25)';
       ctx.textAlign = 'right';
       ctx.fillText('AUTO • VIA ALCHEMY', width - 50, height - 35);
