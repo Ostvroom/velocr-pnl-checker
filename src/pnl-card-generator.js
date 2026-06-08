@@ -4,16 +4,19 @@ const path = require('path');
 const axios = require('axios');
 const config = require('./config');
 
-try {
-  registerFont(path.join(__dirname, '..', 'fonts', 'ChakraPetch-SemiBold.ttf'), { family: 'Chakra Petch', weight: '600' });
-} catch (e) {
-  console.warn('Failed to register Chakra Petch font:', e.message);
-}
-
-try {
-  registerFont(path.join(__dirname, '..', 'fonts', 'Rajdhani-SemiBold.ttf'), { family: 'Rajdhani', weight: '600' });
-} catch (e) {
-  console.warn('Failed to register Rajdhani font:', e.message);
+const cardFonts = [
+  { file: 'ChakraPetch-SemiBold.ttf', family: 'Chakra Petch', weight: '600' },
+  { file: 'ChakraPetch-SemiBold.ttf', family: 'Chakra Petch', weight: '700' },
+  { file: 'Rajdhani-Regular.ttf',     family: 'Rajdhani',     weight: '400' },
+  { file: 'Rajdhani-SemiBold.ttf',    family: 'Rajdhani',     weight: '600' },
+  { file: 'Rajdhani-Bold.ttf',        family: 'Rajdhani',     weight: '700' },
+];
+for (const f of cardFonts) {
+  try {
+    registerFont(path.join(__dirname, '..', 'fonts', f.file), { family: f.family, weight: f.weight });
+  } catch (e) {
+    console.warn(`Failed to register ${f.file}:`, e.message);
+  }
 }
 
 class PnlCardGenerator {

@@ -6,6 +6,7 @@ const axios = require('axios');
 // Register fonts — all three Rajdhani weights so canvas always finds the right variant
 const fonts = [
   { file: 'ChakraPetch-SemiBold.ttf', family: 'Chakra Petch', weight: '600' },
+  { file: 'ChakraPetch-SemiBold.ttf', family: 'Chakra Petch', weight: '700' }, // map bold → semibold (only weight available)
   { file: 'Rajdhani-Regular.ttf',     family: 'Rajdhani',     weight: '400' },
   { file: 'Rajdhani-SemiBold.ttf',    family: 'Rajdhani',     weight: '600' },
   { file: 'Rajdhani-Bold.ttf',        family: 'Rajdhani',     weight: '700' },
@@ -127,10 +128,10 @@ class PnlPanelGenerator {
     let collectionFontSize = 64;
     const maxCollectionWidth = 560; // keeps text clear of the circular image on the right
     const collectionText = data.collection.toUpperCase();
-    ctx.font = `bold ${collectionFontSize}px "Chakra Petch"`;
+    ctx.font = `600 ${collectionFontSize}px "Chakra Petch"`;
     while (ctx.measureText(collectionText).width > maxCollectionWidth && collectionFontSize > 24) {
       collectionFontSize -= 4;
-      ctx.font = `bold ${collectionFontSize}px "Chakra Petch"`;
+      ctx.font = `600 ${collectionFontSize}px "Chakra Petch"`;
     }
     // If still too wide at min size, truncate with ellipsis
     let displayCollectionText = collectionText;
@@ -142,7 +143,7 @@ class PnlPanelGenerator {
     }
     // x=67: pixel-scanned left edge of "COLLECTION" label in template — name aligns under it
     drawText(displayCollectionText, 67, 270, {
-      font: `bold ${collectionFontSize}px "Chakra Petch"`,
+      font: `600 ${collectionFontSize}px "Chakra Petch"`,
       color: COLORS.white
     });
 
