@@ -279,12 +279,13 @@ class PnlPanelGenerator {
       minute: '2-digit',
       timeZone: 'UTC'
     }) + ' UTC';
+    console.log(`[PnL] Panel timestamp: ${fallbackDate} ${fallbackTime}`);
 
-    drawText(data.date || fallbackDate, rightColX, dateY, {
+    drawText(fallbackDate, rightColX, dateY, {
       font: rightColFont,
       color: COLORS.white
     });
-    drawText(data.time || fallbackTime, rightColX, timeY, {
+    drawText(fallbackTime, rightColX, timeY, {
       font: rightColFont,
       color: COLORS.white
     });
