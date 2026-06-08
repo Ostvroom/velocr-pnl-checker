@@ -31,13 +31,25 @@ class PnlPanelGenerator {
     if (Date.now() - this.lastPriceFetch < 300000 && this.ethPriceUsd > 0) {
       return this.ethPriceUsd;
     }
+    // Try CoinGecko first, then Binance as backup
     try {
       const res = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd', { timeout: 5000 });
-      this.ethPriceUsd = res.data?.ethereum?.usd || 3000;
-      this.lastPriceFetch = Date.now();
-    } catch (e) {
-      console.warn('ETH price fetch failed, using fallback:', this.ethPriceUsd);
+      this.ethPriceUsd = res.data?.ethereum?.usd || 0;
+    } catch (e) {}
+
+    if (!this.ethPriceUsd) {
+      try {
+        const res = await axios.get('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT', { timeout: 5000 });
+        this.ethPriceUsd = parseFloat(res.data?.price) || 0;
+      } catch (e) {}
     }
+
+    if (!this.ethPriceUsd) {
+      console.warn('ETH price fetch failed from all sources, using fallback');
+      this.ethPriceUsd = 3000;
+    }
+
+    this.lastPriceFetch = Date.now();
     return this.ethPriceUsd;
   }
 
