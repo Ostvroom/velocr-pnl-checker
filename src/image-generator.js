@@ -77,7 +77,7 @@ class ImageGenerator {
 
       const username = `@${userData.username}`;
       ctx.fillStyle = '#c69c6c'; // Exact gold/brown color from template
-      ctx.font = '38px "Chakra Petch SemiBold"';
+      ctx.font = '38px "ChakraPetchSB"';
       ctx.textAlign = 'left';
 
       // "Fat Gras by 10%": Adding a subtle stroke to thicken the script font
