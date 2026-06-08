@@ -1,9 +1,22 @@
 #!/bin/bash
-# Install custom fonts into the system font directory so Pango/fontconfig picks them up
-FONT_DIR="$HOME/.local/share/fonts"
-mkdir -p "$FONT_DIR"
-cp /opt/render/project/src/fonts/*.ttf "$FONT_DIR/" 2>/dev/null || true
-cp /opt/render/project/src/fonts/*.otf "$FONT_DIR/" 2>/dev/null || true
-fc-cache -f -v 2>/dev/null || true
-echo "Fonts installed. Starting bot..."
+# Copy fonts to ALL paths fontconfig actually scans on Render's Linux.
+# Verified from fc-cache logs: /opt/render/.fonts is the path it looks for.
+set -e
+
+mkdir -p /opt/render/.fonts
+cp -f fonts/*.ttf /opt/render/.fonts/ 2>/dev/null || true
+cp -f fonts/*.otf /opt/render/.fonts/ 2>/dev/null || true
+
+# Also copy into /usr/share/fonts/truetype as a backup (always scanned)
+mkdir -p /usr/share/fonts/truetype/custom 2>/dev/null || true
+cp -f fonts/*.ttf /usr/share/fonts/truetype/custom/ 2>/dev/null || true
+
+# Rebuild the cache and verify our fonts are registered
+fc-cache -f /opt/render/.fonts 2>/dev/null || true
+fc-cache -f 2>/dev/null || true
+
+echo "── Font check ──"
+fc-list | grep -i "chakra\|rajdhani" || echo "WARN: fonts not detected by fontconfig"
+echo "────────────────"
+
 node src/bot.js
