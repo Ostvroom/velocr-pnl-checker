@@ -1,4 +1,4 @@
-require('./fonts'); // registers fonts before any canvas is created
+const { ETHNOCENTRIC } = require('./fonts'); // registers fonts before any canvas is created
 const { createCanvas, loadImage } = require('canvas');
 const fs = require('fs').promises;
 const path = require('path');
@@ -79,7 +79,7 @@ class PnlPanelGenerator {
     // ─── Text styling helpers ───
     const drawText = (text, x, y, options = {}) => {
       const {
-        font = '32px "RajdhaniSB"',
+        font = '32px "Space Grotesk"',
         color = '#FFFFFF',
         align = 'left',
         shadow = false
@@ -113,10 +113,10 @@ class PnlPanelGenerator {
     let collectionFontSize = 64;
     const maxCollectionWidth = 560; // keeps text clear of the circular image on the right
     const collectionText = data.collection.toUpperCase();
-    ctx.font = `${collectionFontSize}px "ChakraPetchSB"`;
+    ctx.font = `${collectionFontSize}px "${ETHNOCENTRIC}"`;
     while (ctx.measureText(collectionText).width > maxCollectionWidth && collectionFontSize > 24) {
       collectionFontSize -= 4;
-      ctx.font = `${collectionFontSize}px "ChakraPetchSB"`;
+      ctx.font = `${collectionFontSize}px "${ETHNOCENTRIC}"`;
     }
     // If still too wide at min size, truncate with ellipsis
     let displayCollectionText = collectionText;
@@ -128,7 +128,7 @@ class PnlPanelGenerator {
     }
     // x=67: pixel-scanned left edge of "COLLECTION" label in template — name aligns under it
     drawText(displayCollectionText, 67, 270, {
-      font: `${collectionFontSize}px "ChakraPetchSB"`,
+      font: `${collectionFontSize}px "${ETHNOCENTRIC}"`,
       color: COLORS.white
     });
 
@@ -141,18 +141,18 @@ class PnlPanelGenerator {
       ctx.textBaseline = 'middle';
 
       // Bold number
-      ctx.font = '38px "RajdhaniBold"';
+      ctx.font = '38px "Space Grotesk"';
       ctx.fillStyle = COLORS.white;
       ctx.fillText(numText, x, yNum);
       const numW = ctx.measureText(numText).width;
 
       // Suffix: regular weight, same y — real font registered so metrics are consistent
-      ctx.font = '24px "RajdhaniSB"';
+      ctx.font = '24px "Space Grotesk"';
       ctx.fillStyle = COLORS.gray;
       ctx.fillText(' ETH', x + numW, yNum);
 
       // USD sub-label
-      ctx.font = '18px "RajdhaniSB"';
+      ctx.font = '18px "Space Grotesk"';
       ctx.fillStyle = COLORS.gray;
       ctx.fillText(usdText, x, yUsd);
     };
@@ -172,12 +172,12 @@ class PnlPanelGenerator {
     // 3. BOUGHT value — aligned with cart icon
     const allTransferred = (data.transferredCount || 0) > 0 && (data.totalBoughtEth || 0) === 0;
     if (allTransferred) {
-      ctx.font = '26px "RajdhaniBold"';
+      ctx.font = '26px "Space Grotesk"';
       ctx.fillStyle = COLORS.gray;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       ctx.fillText('TRANSFERRED', X_BOUGHT, Y_BOUGHT);
-      ctx.font = '16px "RajdhaniSB"';
+      ctx.font = '16px "Space Grotesk"';
       ctx.fillText('no payment on-chain', X_BOUGHT, Y_BOUGHT + 45);
     } else {
       drawMetric(data.totalBoughtEth || 0, X_BOUGHT, Y_BOUGHT, Y_BOUGHT + 45);
@@ -195,11 +195,11 @@ class PnlPanelGenerator {
 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.font = `${countFont}px "RajdhaniBold"`;
+    ctx.font = `${countFont}px "Space Grotesk"`;
     ctx.fillStyle = COLORS.white;
     ctx.fillText(countStr, HOLD_X, holdingY);
     const countW = ctx.measureText(countStr).width;
-    ctx.font = `${nftFont}px "RajdhaniSB"`;
+    ctx.font = `${nftFont}px "Space Grotesk"`;
     ctx.fillStyle = COLORS.gray;
     ctx.fillText(' NFTs', HOLD_X + countW, holdingY);
 
@@ -207,26 +207,26 @@ class PnlPanelGenerator {
     if (holdingCount > 0) {
       if (holdingEth > 0) {
         const hEthText = this.formatK(holdingEth);
-        ctx.font = '20px "RajdhaniBold"';
+        ctx.font = '20px "Space Grotesk"';
         ctx.fillStyle = COLORS.white;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillText(hEthText, HOLD_X, holdingY + 37);
         const hEthW = ctx.measureText(hEthText).width;
-        ctx.font = '20px "RajdhaniSB"';
+        ctx.font = '20px "Space Grotesk"';
         ctx.fillStyle = COLORS.gray;
         ctx.fillText(' ETH', HOLD_X + hEthW, holdingY + 37);
 
-        ctx.font = '14px "RajdhaniSB"';
+        ctx.font = '14px "Space Grotesk"';
         ctx.fillStyle = COLORS.gray;
         ctx.fillText(`≈ ${this.formatUsd(holdingEth, ethPrice)}`, HOLD_X, holdingY + 62);
       } else {
-        ctx.font = '16px "RajdhaniBold"';
+        ctx.font = '16px "Space Grotesk"';
         ctx.fillStyle = COLORS.gray;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.fillText('N/A', HOLD_X, holdingY + 37);
-        ctx.font = '12px "RajdhaniSB"';
+        ctx.font = '12px "Space Grotesk"';
         ctx.fillText('No floor data', HOLD_X, holdingY + 60);
       }
     }
@@ -238,7 +238,7 @@ class PnlPanelGenerator {
     const profitSign = data.totalProfit >= 0 ? '+' : '-';
     const profitText = `${profitSign}${this.formatUsd(Math.abs(data.totalProfit), ethPrice)}`;
     drawText(profitText, 225, 780, {
-      font: '58px "RajdhaniBold"',
+      font: '58px "Space Grotesk"',
       color: profitColor
     });
 
@@ -253,13 +253,13 @@ class PnlPanelGenerator {
     const roiColor = isTransferred ? COLORS.gray : profitColor;
     const maxRoiWidth = 220;
     let roiFontSize = 58; // match TOTAL PROFIT/LOSS size
-    ctx.font = `${roiFontSize}px "RajdhaniBold"`;
+    ctx.font = `${roiFontSize}px "Space Grotesk"`;
     while (ctx.measureText(roiText).width > maxRoiWidth && roiFontSize > 28) {
       roiFontSize -= 4;
-      ctx.font = `${roiFontSize}px "RajdhaniBold"`;
+      ctx.font = `${roiFontSize}px "Space Grotesk"`;
     }
     drawText(roiText, 950, 780, {
-      font: `${roiFontSize}px "RajdhaniBold"`,
+      font: `${roiFontSize}px "Space Grotesk"`,
       color: roiColor
     });
 
@@ -270,7 +270,7 @@ class PnlPanelGenerator {
     const dateY   = 700;    // up 5px total
     const timeY   = 775;
     const traderY = 859.5;  // up 5.5px total
-    const rightColFont = '22px "RajdhaniSB"'; // unified size + weight for all three rows
+    const rightColFont = '22px "Space Grotesk"'; // unified size + weight for all three rows
 
     drawText(data.date || new Date().toLocaleDateString('en-GB'), rightColX, dateY, {
       font: rightColFont,

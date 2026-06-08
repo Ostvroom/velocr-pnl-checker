@@ -227,14 +227,14 @@ class PnlCardGenerator {
     const startY = 100;
 
     // "PnL CARD" label
-    ctx.font = '22px "ChakraPetchSB", sans-serif';
+    ctx.font = '22px "Ethnocentric", sans-serif';
     ctx.fillStyle = '#8b7355';
     ctx.textAlign = 'left';
     ctx.fillText('PnL CARD', startX, startY);
 
     // Mode badge
     const modeText = mode === 'unrealized' ? 'UNREALIZED' : mode === 'realized' ? 'REALIZED' : 'MANUAL';
-    ctx.font = '11px "RajdhaniSB", sans-serif';
+    ctx.font = '11px "Space Grotesk", sans-serif';
     const badgeW = ctx.measureText(modeText).width + 24;
     const badgeX = startX + ctx.measureText('PnL CARD').width + 20;
     const badgeY = startY - 18;
@@ -259,7 +259,7 @@ class PnlCardGenerator {
     ctx.fillText(modeText, badgeX + 12, badgeY + 14);
 
     // Token name
-    ctx.font = '46px "ChakraPetchSB", sans-serif';
+    ctx.font = '46px "Ethnocentric", sans-serif';
     ctx.fillStyle = '#5a3e2b';
     ctx.textAlign = 'left';
     ctx.fillText(name, startX, startY + 65);
@@ -295,7 +295,7 @@ class PnlCardGenerator {
       ctx.stroke();
       ctx.restore();
 
-      ctx.font = '13px "RajdhaniSB", sans-serif';
+      ctx.font = '13px "Space Grotesk", sans-serif';
       ctx.fillStyle = '#a08060';
       ctx.textAlign = 'left';
       ctx.fillText(label, x + 18, y + 28);
@@ -304,13 +304,13 @@ class PnlCardGenerator {
         ctx.save();
         ctx.shadowColor = customColor || accentColor;
         ctx.shadowBlur = 20;
-        ctx.font = '28px "RajdhaniSB", sans-serif';
+        ctx.font = '28px "Space Grotesk", sans-serif';
         ctx.fillStyle = customColor || accentColor;
         ctx.textAlign = 'left';
         ctx.fillText(value, x + 18, y + 65);
         ctx.restore();
       } else {
-        ctx.font = '22px "RajdhaniSB", sans-serif';
+        ctx.font = '22px "Space Grotesk", sans-serif';
         ctx.fillStyle = '#5a3e2b';
         ctx.textAlign = 'left';
         ctx.fillText(value, x + 18, y + 62);
@@ -336,14 +336,14 @@ class PnlCardGenerator {
   }
 
   drawWallet(ctx, wallet, width, height) {
-    ctx.font = '14px "RajdhaniSB", sans-serif';
+    ctx.font = '14px "Space Grotesk", sans-serif';
     ctx.fillStyle = '#a08060';
     ctx.textAlign = 'left';
     ctx.fillText(`Wallet: ${wallet}`, 500, height - 70);
   }
 
   drawBranding(ctx, width, height, mode) {
-    ctx.font = '16px "ChakraPetchSB", sans-serif';
+    ctx.font = '16px "Ethnocentric", sans-serif';
     ctx.fillStyle = 'rgba(90, 62, 43, 0.15)';
     ctx.textAlign = 'left';
     ctx.fillText('VELIST', 50, height - 35);
@@ -357,7 +357,7 @@ class PnlCardGenerator {
 
     // Auto badge if not manual
     if (mode !== 'manual') {
-      ctx.font = '11px "RajdhaniSB", sans-serif';
+      ctx.font = '11px "Space Grotesk", sans-serif';
       ctx.fillStyle = 'rgba(90, 62, 43, 0.25)';
       ctx.textAlign = 'right';
       ctx.fillText('AUTO • VIA ALCHEMY', width - 50, height - 35);
