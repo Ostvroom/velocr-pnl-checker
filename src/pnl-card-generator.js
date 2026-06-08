@@ -4,16 +4,17 @@ const path = require('path');
 const axios = require('axios');
 const config = require('./config');
 
+// Register under the same unique family names as the panel generator,
+// with weight: normal so they match the CSS default weight.
 const cardFonts = [
-  { file: 'ChakraPetch-SemiBold.ttf', family: 'Chakra Petch', weight: '600' },
-  { file: 'ChakraPetch-SemiBold.ttf', family: 'Chakra Petch', weight: '700' },
-  { file: 'Rajdhani-Regular.ttf',     family: 'Rajdhani',     weight: '400' },
-  { file: 'Rajdhani-SemiBold.ttf',    family: 'Rajdhani',     weight: '600' },
-  { file: 'Rajdhani-Bold.ttf',        family: 'Rajdhani',     weight: '700' },
+  { file: 'ChakraPetch-SemiBold.ttf', family: 'ChakraPetchSB' },
+  { file: 'Rajdhani-Regular.ttf',     family: 'RajdhaniReg' },
+  { file: 'Rajdhani-SemiBold.ttf',    family: 'RajdhaniSB' },
+  { file: 'Rajdhani-Bold.ttf',        family: 'RajdhaniBold' },
 ];
 for (const f of cardFonts) {
   try {
-    registerFont(path.join(__dirname, '..', 'fonts', f.file), { family: f.family, weight: f.weight });
+    registerFont(path.join(__dirname, '..', 'fonts', f.file), { family: f.family, weight: 'normal', style: 'normal' });
   } catch (e) {
     console.warn(`Failed to register ${f.file}:`, e.message);
   }

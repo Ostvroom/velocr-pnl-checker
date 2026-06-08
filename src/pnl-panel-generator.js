@@ -14,7 +14,10 @@ const fonts = [
 ];
 for (const f of fonts) {
   try {
-    registerFont(path.join(__dirname, '..', 'fonts', f.file), { family: f.family });
+    // weight 'normal' matches the default CSS font weight (400), preventing Cairo
+    // from rendering broken/faint text when CSS requests a weight that doesn't
+    // match the TTF's internal weight metadata.
+    registerFont(path.join(__dirname, '..', 'fonts', f.file), { family: f.family, weight: 'normal', style: 'normal' });
     console.log(`✓ Registered font: ${f.family} (${f.file})`);
   } catch (e) {
     console.warn(`✗ Font ${f.file} not registered:`, e.message);
