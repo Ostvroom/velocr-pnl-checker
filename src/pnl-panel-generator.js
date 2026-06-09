@@ -19,6 +19,10 @@ class PnlPanelGenerator {
       console.log(`[PnL] ETH/USD price: $${this.ethPriceUsd.toFixed(2)} (${this.ethPriceSource || 'cache'}, cached)`);
       return this.ethPriceUsd;
     }
+    if (Date.now() - this.lastPriceFetch < 300000 && this.ethPriceSource === 'unavailable') {
+      console.warn('[PnL] ETH/USD price unavailable (cached); USD labels will show N/A');
+      return 0;
+    }
 
     let fetchedPrice = 0;
     let fetchedSource = null;
@@ -43,10 +47,12 @@ class PnlPanelGenerator {
     }
 
     if (!fetchedPrice) {
-      fetchedPrice = 3000;
-      fetchedSource = 'fallback';
-      console.warn(`[PnL] ETH/USD price fetch failed from all sources, using fallback $${fetchedPrice.toFixed(2)}`);
-    };
+      this.ethPriceUsd = 0;
+      this.ethPriceSource = 'unavailable';
+      this.lastPriceFetch = Date.now();
+      console.warn('[PnL] ETH/USD price unavailable; USD labels will show N/A');
+      return 0;
+    }
 
     this.ethPriceUsd = fetchedPrice;
     this.ethPriceSource = fetchedSource;
@@ -56,6 +62,7 @@ class PnlPanelGenerator {
   }
 
   formatUsd(ethAmount, ethPrice) {
+    if (!Number.isFinite(ethPrice) || ethPrice <= 0) return 'N/A';
     const usd = ethAmount * ethPrice;
     if (usd >= 1000000) return `$${(usd / 1000000).toFixed(2)}M`;
     if (usd >= 1000) return `$${(usd / 1000).toFixed(3)}K`;
@@ -91,6 +98,7 @@ class PnlPanelGenerator {
     ctx.drawImage(template, 0, 0);
 
     const ethPrice = await this.getEthPrice();
+    const hasEthPrice = Number.isFinite(ethPrice) && ethPrice > 0;
     const boughtEth = data.totalBoughtEth || 0;
     const soldEth = data.totalSoldEth || 0;
     const holdingEth = data.totalHoldingEth || 0;
@@ -273,7 +281,7 @@ class PnlPanelGenerator {
     // NOTE: the template already has a "USD" badge baked in — do NOT draw it again.
     const profitColor = data.totalProfit >= 0 ? COLORS.green : COLORS.red;
     const profitSign = data.totalProfit >= 0 ? '+' : '-';
-    const profitText = `${profitSign}${this.formatUsd(Math.abs(data.totalProfit), ethPrice)}`;
+    const profitText = hasEthPrice ? `${profitSign}${this.formatUsd(Math.abs(data.totalProfit), ethPrice)}` : 'N/A';
     drawText(profitText, 225, 780, {
       font: '58px "Space Grotesk"',
       color: profitColor
