@@ -544,6 +544,12 @@ class DiscordBot {
     });
 
     const embedColor = isProfit ? 0x2ea043 : 0xcf222e;
+    const valueLabel = result.mode === 'unrealized'
+      ? (Number(result.saleFeeRate) > 0 ? '**NET FLOOR:**' : '**CURRENT FLOOR:**')
+      : '**SELL PRICE:**';
+    const feeNote = result.mode === 'unrealized' && Number(result.saleFeeRate) > 0
+      ? `\n**Sale Fees:** ${(Number(result.saleFeeRate) * 100).toFixed(2)}% estimated royalties/marketplace fees`
+      : '';
 
     const statusText = result.mode === 'unrealized'
       ? (isProfit ? '🟢 **Holding — In Profit (Floor)**' : '🔴 **Holding — In Loss (Floor)**')
@@ -554,7 +560,7 @@ class DiscordBot {
       description:
         `**Collection:** ${result.collection}\n` +
         `**${result.entryLabel || 'BUY PRICE'}:** ${buyPrice} ETH\n` +
-        `${result.mode === 'unrealized' ? '**CURRENT FLOOR:**' : '**SELL PRICE:**'} ${sellPrice} ETH\n` +
+        `${valueLabel} ${sellPrice} ETH${feeNote}\n` +
         `**Result:** ${sign}${profit.toFixed(4)} ETH (${sign}${profitPercent.toFixed(2)}%)`,
       color: embedColor,
       image: { url: 'attachment://pnl_card.png' },
@@ -682,6 +688,12 @@ class DiscordBot {
     const sellDisplay = mode === 'sold'
       ? (sellDetected && sellPrice > 0 ? `${sellPrice.toFixed(4)} ETH` : 'Unknown')
       : (floorDetected && currentFloor > 0.00001 ? `${currentFloor.toFixed(4)} ETH` : 'Not found');
+    const valueLabel = mode === 'sold'
+      ? '**SELL PRICE:**'
+      : (Number(result.saleFeeRate) > 0 ? '**NET FLOOR:**' : '**CURRENT FLOOR:**');
+    const feeNote = mode !== 'sold' && Number(result.saleFeeRate) > 0
+      ? `**Sale Fees:** ${(Number(result.saleFeeRate) * 100).toFixed(2)}% estimated royalties/marketplace fees\n`
+      : '';
 
     // Calculate profit only when both prices are known
     let profit = 0;
@@ -733,7 +745,8 @@ class DiscordBot {
 
     let description = `**Collection:** ${result.collection}\n`;
     description += `**${result.entryLabel || 'BUY PRICE'}:** ${buyDisplay}\n`;
-    description += `${mode === 'sold' ? '**SELL PRICE:**' : '**CURRENT FLOOR:**'} ${sellDisplay}\n`;
+    description += `${valueLabel} ${sellDisplay}\n`;
+    description += feeNote;
 
     if (canCalculatePnl) {
       description += `**Result:** ${sign}${profit.toFixed(4)} ETH (${percentText})`;
@@ -1269,6 +1282,12 @@ class DiscordBot {
     const totalRoi = totalBuyCost > 0
       ? (totalProfit / totalBuyCost * 100)
       : (totalProfit > 0 ? Infinity : 0);
+    const saleFeeRate = Math.max(
+      0,
+      ...results
+        .filter(r => r.mode === 'holding')
+        .map(r => Number(r.saleFeeRate) || 0)
+    );
 
     console.log(`[PnL] ${collection}: BOUGHT ${totalBought.toFixed(4)} + GAS ${totalBuyGas.toFixed(4)} = ${(totalBought + totalBuyGas).toFixed(4)} | SOLD ${totalSold.toFixed(4)} | HOLDING ${totalHolding.toFixed(4)} (${holdingCount}) | P&L ${totalProfit.toFixed(4)} ETH | ROI ${isFinite(totalRoi) ? totalRoi.toFixed(1) + '%' : '∞'} | ${transferredOutCount} moved out`);
 
@@ -1289,6 +1308,7 @@ class DiscordBot {
       totalHoldingEth: totalHolding,
       totalProfit: totalProfit,
       totalRoi: totalRoi,
+      saleFeeRate,
       transferredCount: transferredCount,  // NFTs received as gifts/transfers
       date: generatedDate,
       time: generatedTime,

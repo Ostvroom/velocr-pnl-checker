@@ -8,34 +8,50 @@ class PnlPanelGenerator {
   constructor() {
     this.templateDir = path.join(__dirname, '..', 'templates');
     this.outputDir = path.join(__dirname, '..', 'output');
-    this.ethPriceUsd = 3000; // fallback
+    this.ethPriceUsd = 0;
+    this.ethPriceSource = null;
     this.lastPriceFetch = 0;
   }
 
   async getEthPrice() {
     // Cache for 5 minutes
     if (Date.now() - this.lastPriceFetch < 300000 && this.ethPriceUsd > 0) {
+      console.log(`[PnL] ETH/USD price: $${this.ethPriceUsd.toFixed(2)} (${this.ethPriceSource || 'cache'}, cached)`);
       return this.ethPriceUsd;
     }
+
+    let fetchedPrice = 0;
+    let fetchedSource = null;
+
     // Try CoinGecko first, then Binance as backup
     try {
       const res = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd', { timeout: 5000 });
-      this.ethPriceUsd = res.data?.ethereum?.usd || 0;
-    } catch (e) {}
+      fetchedPrice = Number(res.data?.ethereum?.usd) || 0;
+      if (fetchedPrice > 0) fetchedSource = 'CoinGecko';
+    } catch (e) {
+      console.warn(`[PnL] ETH/USD CoinGecko fetch failed: ${e.message}`);
+    }
 
-    if (!this.ethPriceUsd) {
+    if (!fetchedPrice) {
       try {
         const res = await axios.get('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT', { timeout: 5000 });
-        this.ethPriceUsd = parseFloat(res.data?.price) || 0;
-      } catch (e) {}
+        fetchedPrice = parseFloat(res.data?.price) || 0;
+        if (fetchedPrice > 0) fetchedSource = 'Binance ETHUSDT';
+      } catch (e) {
+        console.warn(`[PnL] ETH/USD Binance fetch failed: ${e.message}`);
+      }
     }
 
-    if (!this.ethPriceUsd) {
-      console.warn('ETH price fetch failed from all sources, using fallback');
-      this.ethPriceUsd = 3000;
-    }
+    if (!fetchedPrice) {
+      fetchedPrice = 3000;
+      fetchedSource = 'fallback';
+      console.warn(`[PnL] ETH/USD price fetch failed from all sources, using fallback $${fetchedPrice.toFixed(2)}`);
+    };
 
+    this.ethPriceUsd = fetchedPrice;
+    this.ethPriceSource = fetchedSource;
     this.lastPriceFetch = Date.now();
+    console.log(`[PnL] ETH/USD price: $${this.ethPriceUsd.toFixed(2)} (${this.ethPriceSource})`);
     return this.ethPriceUsd;
   }
 
@@ -75,6 +91,17 @@ class PnlPanelGenerator {
     ctx.drawImage(template, 0, 0);
 
     const ethPrice = await this.getEthPrice();
+    const boughtEth = data.totalBoughtEth || 0;
+    const soldEth = data.totalSoldEth || 0;
+    const holdingEth = data.totalHoldingEth || 0;
+    const profitEth = data.totalProfit || 0;
+    console.log(
+      `[PnL] USD conversions @ $${ethPrice.toFixed(2)}/ETH: ` +
+      `BOUGHT ${boughtEth.toFixed(4)} ETH = ${this.formatUsd(boughtEth, ethPrice)} | ` +
+      `SOLD ${soldEth.toFixed(4)} ETH = ${this.formatUsd(soldEth, ethPrice)} | ` +
+      `HOLDING ${holdingEth.toFixed(4)} ETH = ${this.formatUsd(holdingEth, ethPrice)} | ` +
+      `P&L ${profitEth.toFixed(4)} ETH = ${profitEth < 0 ? '-' : ''}${this.formatUsd(Math.abs(profitEth), ethPrice)}`
+    );
 
     // ─── Text styling helpers ───
     const drawText = (text, x, y, options = {}) => {
@@ -108,6 +135,17 @@ class PnlPanelGenerator {
       red: '#ef4444',
       gold: '#c69c6c'
     };
+
+    const saleFeeRate = Number(data.saleFeeRate) || 0;
+    if (saleFeeRate > 0) {
+      const feeText = `NET FLOOR INCLUDES ${(saleFeeRate * 100).toFixed(2)}% FORCED FEES`;
+      drawText(feeText, 390, 96, {
+        font: '20px "Space Grotesk"',
+        color: COLORS.gold,
+        shadow: true
+      });
+      console.log(`[PnL] Panel fee note: ${feeText}`);
+    }
 
     // 1. Collection name — auto-scale down to stay left of the NFT image (~x=750)
     let collectionFontSize = 64;
@@ -186,7 +224,6 @@ class PnlPanelGenerator {
     // 4. SOLD value — aligned with hexagon icon
     drawMetric(data.totalSoldEth || 0, X_SOLD, Y_SOLD, Y_SOLD + 45);
     const holdingCount = data.holdingCount || 0;
-    const holdingEth = data.totalHoldingEth || 0;
     const holdingY = Y_HOLD;
 
     const countStr = String(holdingCount);

@@ -16,6 +16,7 @@ class NftApiClient {
     this.openSeaKeyFile = path.join(__dirname, '..', 'data', 'opensea-key.json');
     this.slugCache = new Map();        // contract -> collection slug
     this.floorCache = new Map();       // contract -> { floor, ts }
+    this.saleFeeCache = new Map();     // contract -> { rate, samples, ts }
     this.floorCacheTtl = 5 * 60 * 1000; // 5 min
     this._loadOpenSeaKey();
   }
@@ -646,6 +647,16 @@ class NftApiClient {
     }
 
     const liveFloor = await this.getCollectionFloorPrice(contract);
+    const saleFee = await this.getCollectionSaleFeeRate(contract);
+    const saleFeeRate = saleFee.rate || 0;
+    const netFloor = liveFloor > 0 ? liveFloor * (1 - saleFeeRate) : 0;
+    if (liveFloor > 0) {
+      console.log(
+        `[PnL] Single NFT floor: gross ${liveFloor.toFixed(4)} ETH, ` +
+        `sale deductions ${(saleFeeRate * 100).toFixed(2)}% (${saleFee.samples || 0} samples), ` +
+        `net ${netFloor.toFixed(4)} ETH`
+      );
+    }
 
     return {
       mode: 'unrealized',
@@ -658,8 +669,10 @@ class NftApiClient {
       buyPrice: buyInfo.price,
       buyDetected: buyInfo.detected,
       entryLabel: buyInfo.label,
-      currentValue: liveFloor,
-      floorDetected: liveFloor > 0.00001,
+      currentValue: netFloor,
+      grossFloor: liveFloor,
+      saleFeeRate,
+      floorDetected: netFloor > 0.00001,
       currency: 'ETH',
       wallet: normalizedWallet,
       error: null
@@ -796,6 +809,51 @@ class NftApiClient {
 
     this.floorCache.set(contract.toLowerCase(), { floor, ts: Date.now() });
     return floor;
+  }
+
+  /**
+   * Estimate forced sale deductions from recent sales.
+   * Returns the marketplace + royalty rate that should be subtracted from
+   * unrealized floor value. Real sold NFTs use traced wallet proceeds instead.
+   */
+  async getCollectionSaleFeeRate(contract) {
+    const lc = contract.toLowerCase();
+    const cached = this.saleFeeCache.get(lc);
+    if (cached && Date.now() - cached.ts < this.floorCacheTtl) return cached;
+
+    let totalGrossWei = 0;
+    let totalFeeWei = 0;
+    let samples = 0;
+
+    try {
+      const res = await this.request(`${this.nftBaseUrl}/getNFTSales`, {
+        contractAddress: contract,
+        order: 'desc',
+        limit: 20
+      });
+
+      for (const s of res?.nftSales || []) {
+        const seller = s.sellerFee?.amount ? parseInt(s.sellerFee.amount, 10) : 0;
+        const protocol = s.protocolFee?.amount ? parseInt(s.protocolFee.amount, 10) : 0;
+        const royalty = s.royaltyFee?.amount ? parseInt(s.royaltyFee.amount, 10) : 0;
+        const gross = seller + protocol + royalty;
+        const sym = s.sellerFee?.symbol;
+
+        if (gross > 0 && (!sym || sym === 'ETH' || sym === 'WETH')) {
+          totalGrossWei += gross;
+          totalFeeWei += protocol + royalty;
+          samples++;
+        }
+      }
+    } catch (e) {
+      // Fall through to a zero-rate result.
+    }
+
+    const rate = totalGrossWei > 0 ? totalFeeWei / totalGrossWei : 0;
+    const safeRate = rate > 0 && rate < 0.5 ? rate : 0;
+    const result = { rate: safeRate, samples, ts: Date.now() };
+    this.saleFeeCache.set(lc, result);
+    return result;
   }
 
   /**
@@ -1058,7 +1116,16 @@ class NftApiClient {
 
     // Fetch live floor price once for the whole collection
     const liveFloorPrice = await this.getCollectionFloorPrice(contract);
+    const saleFee = await this.getCollectionSaleFeeRate(contract);
+    const saleFeeRate = saleFee.rate || 0;
+    const netFloorPrice = liveFloorPrice > 0 ? liveFloorPrice * (1 - saleFeeRate) : 0;
     console.log(`[PnL] Floor price: ${liveFloorPrice > 0 ? liveFloorPrice.toFixed(4) + ' ETH' : 'N/A (no source)'}`);
+    if (liveFloorPrice > 0) {
+      console.log(
+        `[PnL] Estimated sale deductions: ${(saleFeeRate * 100).toFixed(2)}% ` +
+        `(${saleFee.samples || 0} recent sale samples) => net floor ${netFloorPrice.toFixed(4)} ETH`
+      );
+    }
 
     const results = [];
     const seenTokenIds = new Set();
@@ -1072,7 +1139,7 @@ class NftApiClient {
       const history = await this.getNftFullHistory(wallet, contract, nft.tokenId);
       const collectionName = nft.contract?.name || nft.contract?.openSeaMetadata?.collectionName || 'Unknown';
       const image = nft.image?.cachedUrl || nft.contract?.openSeaMetadata?.imageUrl || '';
-      const floorPrice = liveFloorPrice;
+      const floorPrice = netFloorPrice;
 
       // Resolve the acquisition cost basis (handles free mints → gas/mint fee)
       const cost = await this.resolveBuyCost(history, wallet, contract);
@@ -1103,6 +1170,8 @@ class NftApiClient {
         sellTxHash: null,
         sellTime: null,
         currentFloor: floorPrice,
+        grossFloor: liveFloorPrice,
+        saleFeeRate,
         gasFees: cost.gasFees,
         buyExtraGas: cost.extraGas, // 0 for free mints (gas is already in buyPrice); >0 for paid buys
         holdTime: this.formatHoldTime(history.buy.timestamp, null),
