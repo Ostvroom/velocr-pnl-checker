@@ -141,6 +141,7 @@ class DiscordBot {
     this.client.once(Events.ClientReady, () => {
       console.log(`Ready! Logged in as ${this.client.user.tag}`);
       this.registerCommands();
+      this.logStartupEthPrice();
 
       // Keep-alive to prevent timeouts
       setInterval(() => {
@@ -175,6 +176,19 @@ class DiscordBot {
     this.client.on('warn', warning => {
       console.warn('Discord client warning:', warning);
     });
+  }
+
+  async logStartupEthPrice() {
+    try {
+      const price = await this.pnlPanelGenerator.getEthPrice();
+      if (price > 0) {
+        console.log(`[Startup] ETH/USD price check OK: $${price.toFixed(2)}`);
+      } else {
+        console.warn('[Startup] ETH/USD price check unavailable; PnL panels will show USD as N/A');
+      }
+    } catch (error) {
+      console.warn(`[Startup] ETH/USD price check failed: ${error.message}`);
+    }
   }
 
   async safeInteractionErrorReply(interaction, content = 'There was an error while executing this command!') {
