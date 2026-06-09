@@ -7,6 +7,7 @@ class NftApiClient {
     this.apiKey = apiKey;
     this.hasKey = !!apiKey && apiKey.length > 10;
     this.nftBaseUrl = this.hasKey ? `https://eth-mainnet.g.alchemy.com/nft/v3/${apiKey}` : null;
+    this.nftV2BaseUrl = this.hasKey ? `https://eth-mainnet.g.alchemy.com/nft/v2/${apiKey}` : null;
     this.rpcBaseUrl = this.hasKey ? `https://eth-mainnet.g.alchemy.com/v2/${apiKey}` : null;
 
     // OpenSea floor source (more accurate than Alchemy; covers Blur-listed collections).
@@ -108,6 +109,40 @@ class NftApiClient {
     } catch (e) {
       console.warn(`[Floor] Reservoir floor fetch failed: ${e.message}`);
     }
+    return 0;
+  }
+
+  extractAlchemyFloor(data) {
+    if (!data) return 0;
+    const candidates = [
+      data.openSea?.floorPrice,
+      data.looksRare?.floorPrice,
+      data.openSeaMetadata?.floorPrice,
+      data.contract?.openSeaMetadata?.floorPrice,
+      data.floorPrice
+    ]
+      .map(value => Number(value) || 0)
+      .filter(value => value > 0.00001);
+    return candidates.length > 0 ? Math.min(...candidates) : 0;
+  }
+
+  async getAlchemyFloor(contract) {
+    const sources = [
+      { name: 'Alchemy v3 getFloorPrice', url: `${this.nftBaseUrl}/getFloorPrice` },
+      { name: 'Alchemy v2 getFloorPrice', url: `${this.nftV2BaseUrl}/getFloorPrice` },
+      { name: 'Alchemy contract metadata', url: `${this.nftBaseUrl}/getContractMetadata` }
+    ];
+
+    for (const source of sources) {
+      const data = await this.request(source.url, { contractAddress: contract });
+      const floor = this.extractAlchemyFloor(data);
+      if (floor > 0) {
+        console.log(`[Floor] ${source.name}: ${floor.toFixed(4)} ETH`);
+        return floor;
+      }
+      console.log(`[Floor] ${source.name}: no usable floor`);
+    }
+
     return 0;
   }
 
@@ -789,9 +824,9 @@ class NftApiClient {
 
   /**
    * Fetch live floor price for a collection, with a multi-source fallback chain:
-   * 1. Reservoir public API (no OpenSea key required).
-   * 2. OpenSea API (accurate but key/rate-limit dependent).
-   * 3. Alchemy getFloorPrice (OpenSea + LooksRare; note: API has no `blur` key).
+   * 1. Alchemy floor/metadata using the paid Alchemy key.
+   * 2. Reservoir public API (no OpenSea key required).
+   * 3. OpenSea API (accurate but key/rate-limit dependent).
    * 4. Estimate from recent on-chain sales via getNFTSales.
    * Returns 0 only if no source has data.
    */
@@ -804,28 +839,22 @@ class NftApiClient {
 
     let floor = 0;
 
-    // 1. Reservoir public API (no OpenSea key required)
+    // 1. Alchemy paid API floor/metadata
     try {
-      floor = await this.getReservoirFloor(contract);
+      floor = await this.getAlchemyFloor(contract);
     } catch (e) { /* fall through */ }
 
-    // 2. OpenSea (accurate but key/rate-limit dependent)
+    // 2. Reservoir public API (no OpenSea key required)
     if (floor <= 0) {
       try {
-        floor = await this.getOpenSeaFloor(contract);
+        floor = await this.getReservoirFloor(contract);
       } catch (e) { /* fall through */ }
     }
 
-    // 3. Alchemy getFloorPrice
+    // 3. OpenSea (accurate but key/rate-limit dependent)
     if (floor <= 0) {
       try {
-        const data = await this.request(`${this.nftBaseUrl}/getFloorPrice`, { contractAddress: contract });
-        if (data) {
-          const openSeaFloor = (!data.openSea?.error && data.openSea?.floorPrice) || 0;
-          const looksFloor = (!data.looksRare?.error && data.looksRare?.floorPrice) || 0;
-          const floors = [openSeaFloor, looksFloor].filter(f => f > 0.00001);
-          if (floors.length > 0) floor = Math.min(...floors);
-        }
+        floor = await this.getOpenSeaFloor(contract);
       } catch (e) { /* fall through */ }
     }
 
@@ -1087,7 +1116,12 @@ class NftApiClient {
       return { valid: false, reason: 'not_a_contract' };
     }
     if (meta.tokenType === 'ERC721' || meta.tokenType === 'ERC1155') {
-      return { valid: true, tokenType: meta.tokenType, name: meta.name || meta.openSeaMetadata?.collectionName };
+      return {
+        valid: true,
+        tokenType: meta.tokenType,
+        name: meta.name || meta.openSeaMetadata?.collectionName,
+        floorPrice: this.extractAlchemyFloor(meta)
+      };
     }
     // Alchemy sometimes returns UNKNOWN for valid NFT contracts with non-standard interfaces.
     // Fall back to OpenSea: if it resolves to a collection slug, treat it as valid.
@@ -1143,6 +1177,11 @@ class NftApiClient {
 
     // Fetch live floor price once for the whole collection
     let liveFloorPrice = await this.getCollectionFloorPrice(contract);
+    if (liveFloorPrice <= 0 && validation.floorPrice > 0) {
+      liveFloorPrice = validation.floorPrice;
+      this.floorCache.set(contract.toLowerCase(), { floor: liveFloorPrice, ts: Date.now() });
+      console.log(`[Floor] Alchemy validation metadata floor fallback: ${liveFloorPrice.toFixed(4)} ETH`);
+    }
     if (liveFloorPrice <= 0) {
       const metadataFloors = (ownedData?.ownedNfts || [])
         .map(nft => Number(nft.contract?.openSeaMetadata?.floorPrice) || 0)
