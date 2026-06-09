@@ -232,7 +232,7 @@ class PnlPanelGenerator {
     // BOUGHT label starts at x=184, SOLD at x=500, HOLDING at x=840
     const X_BOUGHT = 184;
     const X_SOLD   = 520;
-    const HOLD_X   = 860;
+    const HOLD_X   = 865;
 
     // Per-section y values — icons in the template are at slightly different heights,
     // so each section's number line is calibrated to sit BESIDE its icon, not above it.
