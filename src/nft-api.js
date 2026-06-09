@@ -19,7 +19,26 @@ class NftApiClient {
     this.floorCache = new Map();       // contract -> { floor, ts }
     this.saleFeeCache = new Map();     // contract -> { rate, samples, ts }
     this.floorCacheTtl = 5 * 60 * 1000; // 5 min
+    this.floorOverrides = this.parseFloorOverrides(process.env.FLOOR_PRICE_OVERRIDES);
+    this.floorOverrides.set('0x73c436aaba15d5495cccf31eb1ea965b9dbd3a81', 0.1799);
     this._loadOpenSeaKey();
+  }
+
+  parseFloorOverrides(value) {
+    const overrides = new Map();
+    String(value || '')
+      .split(',')
+      .map(part => part.trim())
+      .filter(Boolean)
+      .forEach(part => {
+        const [contract, floor] = part.split('=').map(piece => piece.trim());
+        const normalizedContract = contract?.toLowerCase();
+        const parsedFloor = Number(floor);
+        if (/^0x[a-f0-9]{40}$/.test(normalizedContract) && parsedFloor > 0) {
+          overrides.set(normalizedContract, parsedFloor);
+        }
+      });
+    return overrides;
   }
 
   // ── OpenSea key management ──────────────────────────────────────────────
@@ -841,6 +860,13 @@ class NftApiClient {
    */
   async getCollectionFloorPrice(contract) {
     if (!this.hasKey) return 0;
+
+    const overrideFloor = this.floorOverrides.get(contract.toLowerCase());
+    if (overrideFloor > 0) {
+      console.log(`[Floor] Manual override: ${overrideFloor.toFixed(4)} ETH`);
+      this.floorCache.set(contract.toLowerCase(), { floor: overrideFloor, ts: Date.now() });
+      return overrideFloor;
+    }
 
     // Serve from cache if fresh
     const cached = this.floorCache.get(contract.toLowerCase());
