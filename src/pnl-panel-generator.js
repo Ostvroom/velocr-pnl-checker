@@ -24,25 +24,50 @@ class PnlPanelGenerator {
       return 0;
     }
 
+    const priceSources = [
+      {
+        name: 'CoinGecko',
+        url: 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd',
+        parse: data => Number(data?.ethereum?.usd) || 0
+      },
+      {
+        name: 'Coinbase',
+        url: 'https://api.coinbase.com/v2/exchange-rates?currency=ETH',
+        parse: data => Number(data?.data?.rates?.USD) || 0
+      },
+      {
+        name: 'Kraken ETHUSD',
+        url: 'https://api.kraken.com/0/public/Ticker?pair=ETHUSD',
+        parse: data => {
+          const ticker = data?.result ? Object.values(data.result)[0] : null;
+          return Number(ticker?.c?.[0]) || 0;
+        }
+      },
+      {
+        name: 'Binance ETHUSDT',
+        url: 'https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT',
+        parse: data => Number(data?.price) || 0
+      },
+      {
+        name: 'OKX ETH-USDT',
+        url: 'https://www.okx.com/api/v5/market/ticker?instId=ETH-USDT',
+        parse: data => Number(data?.data?.[0]?.last) || 0
+      }
+    ];
+
     let fetchedPrice = 0;
     let fetchedSource = null;
-
-    // Try CoinGecko first, then Binance as backup
-    try {
-      const res = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd', { timeout: 5000 });
-      fetchedPrice = Number(res.data?.ethereum?.usd) || 0;
-      if (fetchedPrice > 0) fetchedSource = 'CoinGecko';
-    } catch (e) {
-      console.warn(`[PnL] ETH/USD CoinGecko fetch failed: ${e.message}`);
-    }
-
-    if (!fetchedPrice) {
+    for (const source of priceSources) {
       try {
-        const res = await axios.get('https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT', { timeout: 5000 });
-        fetchedPrice = parseFloat(res.data?.price) || 0;
-        if (fetchedPrice > 0) fetchedSource = 'Binance ETHUSDT';
+        const res = await axios.get(source.url, { timeout: 5000 });
+        fetchedPrice = source.parse(res.data);
+        if (fetchedPrice >= 100 && fetchedPrice <= 100000) {
+          fetchedSource = source.name;
+          break;
+        }
+        console.warn(`[PnL] ETH/USD ${source.name} returned no usable price: ${fetchedPrice || 'empty'}`);
       } catch (e) {
-        console.warn(`[PnL] ETH/USD Binance fetch failed: ${e.message}`);
+        console.warn(`[PnL] ETH/USD ${source.name} fetch failed: ${e.message}`);
       }
     }
 
