@@ -94,21 +94,30 @@ class NftApiClient {
   }
 
   async getReservoirFloor(contract) {
-    try {
-      const res = await axios.get('https://api.reservoir.tools/collections/v7', {
-        params: { id: contract.toLowerCase() },
-        headers: { accept: 'application/json' },
-        timeout: 12000
-      });
-      const collection = res.data?.collections?.[0];
-      const floor = Number(collection?.floorAsk?.price?.amount?.decimal) || 0;
-      if (floor > 0.0000001) {
-        console.log(`[Floor] Reservoir floor: ${floor.toFixed(4)} ETH`);
-        return floor;
+    const endpoints = [
+      'https://api-ethereum.reservoir.tools/collections/v7',
+      'https://api.reservoir.tools/collections/v7'
+    ];
+
+    for (const url of endpoints) {
+      try {
+        const res = await axios.get(url, {
+          params: { id: contract.toLowerCase() },
+          headers: { accept: 'application/json' },
+          timeout: 12000
+        });
+        const collection = res.data?.collections?.[0];
+        const floor = Number(collection?.floorAsk?.price?.amount?.decimal) || 0;
+        if (floor > 0.0000001) {
+          console.log(`[Floor] Reservoir floor (${new URL(url).hostname}): ${floor.toFixed(4)} ETH`);
+          return floor;
+        }
+        console.log(`[Floor] Reservoir ${new URL(url).hostname}: no usable floor`);
+      } catch (e) {
+        console.warn(`[Floor] Reservoir ${new URL(url).hostname} fetch failed: ${e.message}`);
       }
-    } catch (e) {
-      console.warn(`[Floor] Reservoir floor fetch failed: ${e.message}`);
     }
+
     return 0;
   }
 
