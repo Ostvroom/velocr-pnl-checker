@@ -163,12 +163,7 @@ class DiscordBot {
         }
       } catch (error) {
         console.error('Error handling interaction:', error);
-        if (!interaction.replied && !interaction.deferred) {
-          await interaction.reply({
-            content: 'There was an error while executing this command!',
-            ephemeral: true
-          });
-        }
+        await this.safeInteractionErrorReply(interaction);
       }
     });
 
@@ -180,6 +175,24 @@ class DiscordBot {
     this.client.on('warn', warning => {
       console.warn('Discord client warning:', warning);
     });
+  }
+
+  async safeInteractionErrorReply(interaction, content = 'There was an error while executing this command!') {
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp({ content, ephemeral: true });
+      } else {
+        await interaction.reply({ content, ephemeral: true });
+      }
+    } catch (error) {
+      // 10062: interaction expired/already consumed; 40060: already acknowledged.
+      // These are expected when duplicate bot instances receive the same interaction.
+      if (error?.code === 10062 || error?.code === 40060) {
+        console.warn(`[Discord] Could not send error reply: ${error.message}`);
+        return;
+      }
+      console.error('Failed to send interaction error reply:', error);
+    }
   }
 
   async registerCommands() {
