@@ -92,6 +92,25 @@ class NftApiClient {
     return floor > 0.0000001 ? floor : 0;
   }
 
+  async getReservoirFloor(contract) {
+    try {
+      const res = await axios.get('https://api.reservoir.tools/collections/v7', {
+        params: { id: contract.toLowerCase() },
+        headers: { accept: 'application/json' },
+        timeout: 12000
+      });
+      const collection = res.data?.collections?.[0];
+      const floor = Number(collection?.floorAsk?.price?.amount?.decimal) || 0;
+      if (floor > 0.0000001) {
+        console.log(`[Floor] Reservoir floor: ${floor.toFixed(4)} ETH`);
+        return floor;
+      }
+    } catch (e) {
+      console.warn(`[Floor] Reservoir floor fetch failed: ${e.message}`);
+    }
+    return 0;
+  }
+
   async request(url, params = {}) {
     try {
       const response = await axios.get(url, { params, timeout: 15000 });
@@ -770,9 +789,10 @@ class NftApiClient {
 
   /**
    * Fetch live floor price for a collection, with a multi-source fallback chain:
-   * 1. OpenSea API (most accurate; covers Blur-listed collections) — cached 5 min.
-   * 2. Alchemy getFloorPrice (OpenSea + LooksRare; note: API has no `blur` key).
-   * 3. Estimate from recent on-chain sales via getNFTSales.
+   * 1. Reservoir public API (no OpenSea key required).
+   * 2. OpenSea API (accurate but key/rate-limit dependent).
+   * 3. Alchemy getFloorPrice (OpenSea + LooksRare; note: API has no `blur` key).
+   * 4. Estimate from recent on-chain sales via getNFTSales.
    * Returns 0 only if no source has data.
    */
   async getCollectionFloorPrice(contract) {
@@ -784,12 +804,19 @@ class NftApiClient {
 
     let floor = 0;
 
-    // 1. OpenSea (primary)
+    // 1. Reservoir public API (no OpenSea key required)
     try {
-      floor = await this.getOpenSeaFloor(contract);
+      floor = await this.getReservoirFloor(contract);
     } catch (e) { /* fall through */ }
 
-    // 2. Alchemy getFloorPrice
+    // 2. OpenSea (accurate but key/rate-limit dependent)
+    if (floor <= 0) {
+      try {
+        floor = await this.getOpenSeaFloor(contract);
+      } catch (e) { /* fall through */ }
+    }
+
+    // 3. Alchemy getFloorPrice
     if (floor <= 0) {
       try {
         const data = await this.request(`${this.nftBaseUrl}/getFloorPrice`, { contractAddress: contract });
@@ -802,7 +829,7 @@ class NftApiClient {
       } catch (e) { /* fall through */ }
     }
 
-    // 3. Recent-sales estimate
+    // 4. Recent-sales estimate
     if (floor <= 0) {
       floor = await this.estimateFloorFromSales(contract);
     }
@@ -1115,7 +1142,17 @@ class NftApiClient {
     console.log(`[PnL] Outgoing (sold/transferred) found: ${soldNfts.length}`);
 
     // Fetch live floor price once for the whole collection
-    const liveFloorPrice = await this.getCollectionFloorPrice(contract);
+    let liveFloorPrice = await this.getCollectionFloorPrice(contract);
+    if (liveFloorPrice <= 0) {
+      const metadataFloors = (ownedData?.ownedNfts || [])
+        .map(nft => Number(nft.contract?.openSeaMetadata?.floorPrice) || 0)
+        .filter(floor => floor > 0.00001);
+      if (metadataFloors.length > 0) {
+        liveFloorPrice = Math.min(...metadataFloors);
+        this.floorCache.set(contract.toLowerCase(), { floor: liveFloorPrice, ts: Date.now() });
+        console.log(`[Floor] Alchemy metadata floor fallback: ${liveFloorPrice.toFixed(4)} ETH`);
+      }
+    }
     const saleFee = await this.getCollectionSaleFeeRate(contract);
     const saleFeeRate = saleFee.rate || 0;
     const netFloorPrice = liveFloorPrice > 0 ? liveFloorPrice * (1 - saleFeeRate) : 0;
