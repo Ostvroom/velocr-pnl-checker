@@ -239,9 +239,9 @@ class PnlPanelGenerator {
 
     // Per-section y values — icons in the template are at slightly different heights,
     // so each section's number line is calibrated to sit BESIDE its icon, not above it.
-    const Y_BOUGHT = 500;
-    const Y_SOLD   = 500;
-    const Y_HOLD   = 500;
+    const Y_BOUGHT = 507;
+    const Y_SOLD   = 507;
+    const Y_HOLD   = 507;
 
     // 3. BOUGHT value — aligned with cart icon
     const allTransferred = (data.transferredCount || 0) > 0 && (data.totalBoughtEth || 0) === 0;
@@ -310,7 +310,7 @@ class PnlPanelGenerator {
     const profitColor = data.totalProfit >= 0 ? COLORS.green : COLORS.red;
     const profitSign = data.totalProfit >= 0 ? '+' : '-';
     const profitText = hasEthPrice ? `${profitSign}${this.formatUsd(Math.abs(data.totalProfit), ethPrice)}` : 'N/A';
-    drawText(profitText, 225, 780, {
+    drawText(profitText, 225, 787, {
       font: '58px "Space Grotesk"',
       color: profitColor
     });
@@ -331,7 +331,7 @@ class PnlPanelGenerator {
       roiFontSize -= 4;
       ctx.font = `${roiFontSize}px "Space Grotesk"`;
     }
-    drawText(roiText, 950, 780, {
+    drawText(roiText, 950, 787, {
       font: `${roiFontSize}px "Space Grotesk"`,
       color: roiColor
     });
