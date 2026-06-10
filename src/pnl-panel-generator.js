@@ -229,10 +229,13 @@ class PnlPanelGenerator {
     };
 
     // ── Calibrated x positions (pixel-scanned from template — label text start x) ──
-    // BOUGHT label starts at x=184, SOLD at x=500, HOLDING at x=840
-    const X_BOUGHT = 184;
-    const X_SOLD   = 520;
-    const HOLD_X   = 865;
+    // Win/loss templates have slightly different top metric artwork positions.
+    const metricX = mode === 'loss'
+      ? { bought: 187, sold: 532, holding: 880 }
+      : { bought: 184, sold: 520, holding: 865 };
+    const X_BOUGHT = metricX.bought;
+    const X_SOLD   = metricX.sold;
+    const HOLD_X   = metricX.holding;
 
     // Per-section y values — icons in the template are at slightly different heights,
     // so each section's number line is calibrated to sit BESIDE its icon, not above it.
