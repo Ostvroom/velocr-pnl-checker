@@ -825,6 +825,19 @@ class NftApiClient {
   }
 
   /**
+   * Resolve an OpenSea collection slug to an Ethereum contract address.
+   * Returns lowercase contract address or null if not found.
+   */
+  async resolveSlugToContract(slug) {
+    const data = await this.openSeaGet(`collections/${encodeURIComponent(slug)}`);
+    if (!data) return null;
+    const contracts = data.contracts;
+    if (!Array.isArray(contracts) || contracts.length === 0) return null;
+    const ethContract = contracts.find(c => c.chain === 'ethereum') || contracts[0];
+    return ethContract?.address?.toLowerCase() || null;
+  }
+
+  /**
    * Parse OpenSea URL or contract address.
    * Returns { contract, tokenId } or { slug } or null.
    */

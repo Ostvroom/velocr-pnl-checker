@@ -1223,19 +1223,23 @@ class DiscordBot {
 
     if (!parsed) {
       return interaction.reply({
-        content: '❌ Invalid input. Please provide a contract address (0x...) or OpenSea asset URL.',
-        ephemeral: true
-      });
-    }
-
-    if (parsed.slug) {
-      return interaction.reply({
-        content: '❌ Collection slug URLs are not supported yet. Please provide the contract address directly (0x...).',
+        content: '❌ Invalid input. Please provide a contract address (0x...) or OpenSea URL.',
         ephemeral: true
       });
     }
 
     await interaction.deferReply({ ephemeral: true });
+
+    if (parsed.slug) {
+      await interaction.editReply(`🔍 Resolving collection **"${parsed.slug}"** via OpenSea...`);
+      const resolvedContract = await this.nftApi.resolveSlugToContract(parsed.slug);
+      if (!resolvedContract) {
+        return interaction.editReply(
+          `❌ Could not resolve **"${parsed.slug}"** to an Ethereum contract. Please provide the contract address directly (\`0x...\`).`
+        );
+      }
+      parsed.contract = resolvedContract;
+    }
 
     const contract = parsed.contract;
     await interaction.editReply(`🔍 Analyzing collection \`${contract}\` for wallet \`${wallet}\`... This may take a moment.`);
