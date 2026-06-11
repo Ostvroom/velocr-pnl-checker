@@ -100,6 +100,38 @@ class PnlPanelGenerator {
     return num.toFixed(3);
   }
 
+  /**
+   * Paint the page background over unwanted baked template artwork:
+   *  - the empty left arc of the mascot's circular ring (both win + loss), which
+   *    otherwise reads as a hollow gap to the left of the character;
+   *  - on the loss card, the full-body mascot's lower edge that drops onto the
+   *    DATE ISSUED panel — faded out so the two don't collide.
+   * Uses opaque→transparent gradients so the covered area blends seamlessly into
+   * the near-black background instead of leaving a hard seam.
+   */
+  cleanupTemplateArt(ctx, mode) {
+    const bg = mode === 'loss' ? '11,12,14' : '9,10,12';
+
+    // 1. Empty left ring-arc. Opaque on the far left (covers the faint ring),
+    //    fading to transparent before reaching the character on the right.
+    const crescent = ctx.createLinearGradient(1040, 0, 1205, 0);
+    crescent.addColorStop(0, `rgba(${bg},1)`);
+    crescent.addColorStop(0.62, `rgba(${bg},1)`);
+    crescent.addColorStop(1, `rgba(${bg},0)`);
+    ctx.fillStyle = crescent;
+    ctx.fillRect(1040, 95, 170, 500);
+
+    // 2. Loss card only: fade the mascot's lower body into the background just
+    //    above the date panel (vertical gradient, opaque at the bottom).
+    if (mode === 'loss') {
+      const skirt = ctx.createLinearGradient(0, 560, 0, 625);
+      skirt.addColorStop(0, `rgba(${bg},0)`);
+      skirt.addColorStop(1, `rgba(${bg},1)`);
+      ctx.fillStyle = skirt;
+      ctx.fillRect(1150, 560, 420, 65);
+    }
+  }
+
   async generatePanel(data, mode = 'win') {
     const templateFile = mode === 'win'
       ? path.join(this.templateDir, 'pnl-win-template-4slot.png')
@@ -121,6 +153,10 @@ class PnlPanelGenerator {
     }
 
     ctx.drawImage(template, 0, 0);
+
+    // Clean up baked template art: hide the empty left arc of the mascot's circular
+    // ring (both cards) and fade the loss mascot's lower body off the date panel.
+    this.cleanupTemplateArt(ctx, mode);
 
     const ethPrice = await this.getEthPrice();
     const hasEthPrice = Number.isFinite(ethPrice) && ethPrice > 0;
