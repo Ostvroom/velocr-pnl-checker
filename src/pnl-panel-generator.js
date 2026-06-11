@@ -283,10 +283,13 @@ class PnlPanelGenerator {
     // 8-10. Date / Time / Trader (right column).
     // Icons sit at x≈1372; VALUE text must start at x=1450 to clear the icon
     // and sit in the open text area to the right of the icon.
-    const rightColX = 1430; // moved 20px left
-    const dateY   = 700;    // up 5px total
-    const timeY   = 775;
-    const traderY = 859.5;  // up 5.5px total
+    // Labels (DATE/TIME/TRADED BY) sit at y≈665/745/825 (pixel-scanned, evenly 80px
+    // apart) with thin dividers at y≈722/802. Place each value a uniform 28px below its
+    // label so all three label/value pairs match and the value clears the divider below.
+    const rightColX = 1430; // aligned with the label text left edge (x≈1432)
+    const dateY   = 693;
+    const timeY   = 773;
+    const traderY = 853;
     const rightColFont = '22px "Space Grotesk"'; // unified size + weight for all three rows
 
     const generatedAt = new Date();
