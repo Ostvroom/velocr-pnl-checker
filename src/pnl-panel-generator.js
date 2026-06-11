@@ -102,8 +102,8 @@ class PnlPanelGenerator {
 
   async generatePanel(data, mode = 'win') {
     const templateFile = mode === 'win'
-      ? path.join(this.templateDir, 'pnl-win-template.png')
-      : path.join(this.templateDir, 'pnl-loss-template.png');
+      ? path.join(this.templateDir, 'pnl-win-template-4slot.png')
+      : path.join(this.templateDir, 'pnl-loss-template-4slot.png');
 
     const canvas = createCanvas(1920, 1080);
     const ctx = canvas.getContext('2d');
@@ -203,106 +203,50 @@ class PnlPanelGenerator {
       color: COLORS.white
     });
 
-    // Helper: draw metric at fixed x (aligned with the label text in the template)
-    const drawMetric = (value, x, yNum, yUsd) => {
-      const numText = this.formatK(value);
-      const usdText = `≈ ${this.formatUsd(value, ethPrice)}`;
+    // ── 4-slot metric band: MINTED · BOUGHT · SOLD · HOLDING ──
+    // Each slot shows a big NFT COUNT plus a small sub-line:
+    //   minted/bought → "avg <price> ETH"   sold → "avg <price> ETH"   holding → "floor <price> ETH"
+    // X positions line up under the chips drawn in scripts/build-4slot-template.js
+    // (FIRST_CHIP_X=48, SLOT_W=270). Value sits just inside each chip's left edge.
+    const SLOT_X = { minted: 52, bought: 322, sold: 592, holding: 862 };
+    const Y_COUNT = 527; // big count baseline
+    const Y_SUB = 562;   // avg / floor sub-line
 
+    const drawSlot = (x, count, avgEth, kind) => {
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
 
-      // Bold number
-      ctx.font = '38px "Space Grotesk"';
+      // Big NFT count
+      const countStr = String(count || 0);
+      ctx.font = '40px "Space Grotesk"';
       ctx.fillStyle = COLORS.white;
-      ctx.fillText(numText, x, yNum);
-      const numW = ctx.measureText(numText).width;
-
-      // Suffix: regular weight, same y — real font registered so metrics are consistent
-      ctx.font = '24px "Space Grotesk"';
+      ctx.fillText(countStr, x, Y_COUNT);
+      const countW = ctx.measureText(countStr).width;
+      ctx.font = '20px "Space Grotesk"';
       ctx.fillStyle = COLORS.gray;
-      ctx.fillText(' ETH', x + numW, yNum);
+      ctx.fillText(count === 1 ? ' NFT' : ' NFTs', x + countW, Y_COUNT);
 
-      // USD sub-label
-      ctx.font = '18px "Space Grotesk"';
+      // Sub-line: avg price (minted/bought/sold) or floor (holding)
+      const prefix = kind === 'holding' ? 'floor ' : 'avg ';
+      let sub;
+      if (!count) {
+        sub = '—';
+      } else if (avgEth > 0.00001) {
+        sub = `${prefix}${avgEth.toFixed(3)} ETH`;
+      } else if (kind === 'holding') {
+        sub = 'no floor data';
+      } else {
+        sub = `${prefix}0.000 ETH`; // free mint / unpriced
+      }
+      ctx.font = '17px "Space Grotesk"';
       ctx.fillStyle = COLORS.gray;
-      ctx.fillText(usdText, x, yUsd);
+      ctx.fillText(sub, x, Y_SUB);
     };
 
-    // ── Calibrated x positions (pixel-scanned from template — label text start x) ──
-    // Win/loss templates have slightly different top metric artwork positions.
-    const metricX = mode === 'loss'
-      ? { bought: 187, sold: 532, holding: 880 }
-      : { bought: 184, sold: 520, holding: 865 };
-    const X_BOUGHT = metricX.bought;
-    const X_SOLD   = metricX.sold;
-    const HOLD_X   = metricX.holding;
-
-    // Per-section y values — icons in the template are at slightly different heights,
-    // so each section's number line is calibrated to sit BESIDE its icon, not above it.
-    const Y_BOUGHT = 507;
-    const Y_SOLD   = 507;
-    const Y_HOLD   = 507;
-
-    // 3. BOUGHT value — aligned with cart icon
-    const allTransferred = (data.transferredCount || 0) > 0 && (data.totalBoughtEth || 0) === 0;
-    if (allTransferred) {
-      ctx.font = '26px "Space Grotesk"';
-      ctx.fillStyle = COLORS.gray;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('TRANSFERRED', X_BOUGHT, Y_BOUGHT);
-      ctx.font = '16px "Space Grotesk"';
-      ctx.fillText('no payment on-chain', X_BOUGHT, Y_BOUGHT + 45);
-    } else {
-      drawMetric(data.totalBoughtEth || 0, X_BOUGHT, Y_BOUGHT, Y_BOUGHT + 45);
-    }
-
-    // 4. SOLD value — aligned with hexagon icon
-    drawMetric(data.totalSoldEth || 0, X_SOLD, Y_SOLD, Y_SOLD + 45);
-    const holdingCount = data.holdingCount || 0;
-    const holdingY = Y_HOLD;
-
-    const countStr = String(holdingCount);
-    const countFont = countStr.length === 1 ? 40 : countStr.length === 2 ? 30 : 22;
-    const nftFont = Math.round(countFont * 0.65); // ~65% of count size
-
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.font = `${countFont}px "Space Grotesk"`;
-    ctx.fillStyle = COLORS.white;
-    ctx.fillText(countStr, HOLD_X, holdingY);
-    const countW = ctx.measureText(countStr).width;
-    ctx.font = `${nftFont}px "Space Grotesk"`;
-    ctx.fillStyle = COLORS.gray;
-    ctx.fillText(' NFTs', HOLD_X + countW, holdingY);
-
-    // Current floor value (if any held) — stacked below the count
-    if (holdingCount > 0) {
-      if (holdingEth > 0) {
-        const hEthText = this.formatK(holdingEth);
-        ctx.font = '20px "Space Grotesk"';
-        ctx.fillStyle = COLORS.white;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(hEthText, HOLD_X, holdingY + 37);
-        const hEthW = ctx.measureText(hEthText).width;
-        ctx.font = '20px "Space Grotesk"';
-        ctx.fillStyle = COLORS.gray;
-        ctx.fillText(' ETH', HOLD_X + hEthW, holdingY + 37);
-
-        ctx.font = '14px "Space Grotesk"';
-        ctx.fillStyle = COLORS.gray;
-        ctx.fillText(`≈ ${this.formatUsd(holdingEth, ethPrice)}`, HOLD_X, holdingY + 62);
-      } else {
-        ctx.font = '16px "Space Grotesk"';
-        ctx.fillStyle = COLORS.gray;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('N/A', HOLD_X, holdingY + 37);
-        ctx.font = '12px "Space Grotesk"';
-        ctx.fillText('No floor data', HOLD_X, holdingY + 60);
-      }
-    }
+    drawSlot(SLOT_X.minted, data.mintedCount || 0, data.mintedAvgEth || 0, 'minted');
+    drawSlot(SLOT_X.bought, data.boughtCount || 0, data.boughtAvgEth || 0, 'bought');
+    drawSlot(SLOT_X.sold, data.soldCount || 0, data.soldAvgEth || 0, 'sold');
+    drawSlot(SLOT_X.holding, data.holdingCount || 0, data.holdingFloorEth || 0, 'holding');
 
 
     // 6. Total P&L (bottom left, large)

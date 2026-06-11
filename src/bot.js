@@ -1276,6 +1276,16 @@ class DiscordBot {
     let holdingCount = 0;
     let soldCount = 0;
 
+    // Minted vs bought split (acquisition method, independent of later sale).
+    // A free mint has buyLabel 'MINT PRICE'/'MINT FEE'; a secondary buy is 'BUY PRICE'.
+    // Mint/buy counts span both held and sold NFTs (a sold NFT was still minted/bought),
+    // so they intentionally overlap with soldCount — matching the reference card.
+    let mintedCount = 0;
+    let mintedPriceSum = 0;
+    let boughtCount = 0;
+    let boughtPriceSum = 0;
+    let soldPriceSum = 0;
+
     let transferredOutCount = 0;
     for (const r of results) {
       // NFTs transferred out with no proceeds (moved to own wallet/staking/gifted)
@@ -1290,9 +1300,24 @@ class DiscordBot {
         totalBought += r.buyPrice;
         totalBuyCost += r.buyPrice;
       }
+
+      // Classify acquisition method for the MINTED / BOUGHT slots.
+      const isMint = r.buyLabel === 'MINT PRICE' || r.buyLabel === 'MINT FEE';
+      const isBuy = r.buyLabel === 'BUY PRICE';
+      if (isMint) {
+        mintedCount++;
+        if (r.buyDetected && r.buyPrice > 0) mintedPriceSum += r.buyPrice;
+      } else if (isBuy) {
+        boughtCount++;
+        if (r.buyDetected && r.buyPrice > 0) boughtPriceSum += r.buyPrice;
+      }
+
       if (r.mode === 'sold') {
         soldCount++;
-        if (r.sellDetected) totalSold += r.sellPrice;
+        if (r.sellDetected) {
+          totalSold += r.sellPrice;
+          soldPriceSum += r.sellPrice;
+        }
       } else {
         holdingCount++;
         if (r.currentFloor > 0.00001) totalHolding += r.currentFloor;
@@ -1301,6 +1326,12 @@ class DiscordBot {
         totalProfit += r.profit;
       }
     }
+
+    // Averages for each slot (avg mint price, avg buy price, avg sale price, net floor/item).
+    const mintedAvgEth = mintedCount > 0 ? mintedPriceSum / mintedCount : 0;
+    const boughtAvgEth = boughtCount > 0 ? boughtPriceSum / boughtCount : 0;
+    const soldAvgEth = soldCount > 0 ? soldPriceSum / soldCount : 0;
+    const holdingFloorEth = holdingCount > 0 ? totalHolding / holdingCount : 0;
 
     const isProfit = totalProfit >= 0;
     const collection = results[0]?.collection || 'Unknown';
@@ -1337,6 +1368,14 @@ class DiscordBot {
       totalSoldEth: totalSold,
       holdingCount: holdingCount,
       totalHoldingEth: totalHolding,
+      // ── 4-slot breakdown (MINTED · BOUGHT · SOLD · HOLDING): count + avg price ──
+      mintedCount,
+      mintedAvgEth,
+      boughtCount,
+      boughtAvgEth,
+      soldCount,
+      soldAvgEth,
+      holdingFloorEth,
       totalProfit: totalProfit,
       totalRoi: totalRoi,
       saleFeeRate,
