@@ -1273,7 +1273,19 @@ class NftApiClient {
    */
   async validateContract(contract) {
     const meta = await this.request(`${this.nftBaseUrl}/getContractMetadata`, { contractAddress: contract });
-    if (!meta) return { valid: false, reason: 'lookup_failed' };
+    const osData = await this.openSeaGet(`chain/ethereum/contract/${contract}`);
+
+    if (!meta) {
+      if (osData?.collection) {
+        console.log(`[Validate] Alchemy metadata lookup failed but OpenSea confirms collection: ${osData.collection}`);
+        return {
+          valid: true,
+          tokenType: osData.contract_standard || 'UNKNOWN',
+          name: osData.name || osData.collection
+        };
+      }
+      return { valid: false, reason: 'lookup_failed' };
+    }
     if (meta.tokenType === 'NOT_A_CONTRACT') {
       return { valid: false, reason: 'not_a_contract' };
     }
@@ -1287,11 +1299,10 @@ class NftApiClient {
     }
     // Alchemy sometimes returns UNKNOWN for valid NFT contracts with non-standard interfaces.
     // Fall back to OpenSea: if it resolves to a collection slug, treat it as valid.
-    const osData = await this.openSeaGet(`chain/ethereum/contract/${contract}`);
     if (osData?.collection) {
       const tokenType = meta.tokenType || 'UNKNOWN';
       console.log(`[Validate] Alchemy said ${tokenType} but OpenSea confirms collection: ${osData.collection}`);
-      return { valid: true, tokenType, name: osData.collection };
+      return { valid: true, tokenType, name: osData.name || osData.collection };
     }
     return { valid: false, reason: 'not_an_nft', tokenType: meta.tokenType };
   }

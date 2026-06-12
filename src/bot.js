@@ -1242,7 +1242,8 @@ class DiscordBot {
     }
 
     const contract = parsed.contract;
-    await interaction.editReply(`🔍 Analyzing collection \`${contract}\` for wallet \`${wallet}\`... This may take a moment.`);
+    const collectionLabel = parsed.slug ? `${parsed.slug} (${contract})` : contract;
+    await interaction.editReply(`🔍 Analyzing collection \`${collectionLabel}\` for wallet \`${wallet}\`... This may take a moment.`);
 
     try {
       const results = await this.nftApi.analyzeCollectionPnL(wallet, contract);
