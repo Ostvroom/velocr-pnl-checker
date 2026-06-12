@@ -982,6 +982,49 @@ class DiscordBot {
     };
   }
 
+  buildPanelEmbed(wallet) {
+    const baseDescription = wallet
+      ? `✅ **Wallet connected:** \`${wallet}\`\n\nClick **📊 My PnL** to scan a collection.`
+      : '**Track NFT collection profit/loss with on-chain data.**\n\n1. Click **🔗 Connect Wallet** to link your ETH wallet\n2. Click **📊 My PnL** and paste a collection contract or OpenSea link';
+
+    return {
+      title: '📊 V3 PNL — NFT Profit Tracker',
+      description: `${baseDescription}\n\n**━━━━━━━━━━━━━━━━━━━━━━━**`,
+      color: wallet ? 0x2ea043 : 0xc69c6c,
+      image: { url: 'attachment://banner.jpg' },
+      fields: [
+        {
+          name: '🖼️ What It Tracks',
+          value:
+            '• Minted, bought, sold, and currently held NFTs\n' +
+            '• Spent, sales, unrealized profit, total PnL, and ROI\n' +
+            '• Gas fees, batch buys/sells, and transferred-out NFTs\n' +
+            '• Exact / estimated / unknown data confidence in preview',
+          inline: false
+        },
+        {
+          name: '🔗 Supported Inputs',
+          value:
+            '• Collection contract like `0x1234...abcd`\n' +
+            '• OpenSea collection URL: `opensea.io/collection/...`\n' +
+            '• OpenSea asset URL: `opensea.io/assets/ethereum/...`\n' +
+            '• Ethereum mainnet collections only',
+          inline: false
+        },
+        {
+          name: '💡 If No Activity Shows',
+          value:
+            '• Confirm the connected wallet is the one that traded the NFTs\n' +
+            '• Some OpenSea collections use multiple or wrapped contracts\n' +
+            '• Send an asset link or transaction hash if a collection link looks wrong',
+          inline: false
+        }
+      ],
+      footer: { text: 'Created by Sultan' },
+      timestamp: new Date().toISOString()
+    };
+  }
+
   buildPanelComponents() {
     // The panel is a single shared message used by everyone, so it always shows
     // the same two generic buttons. If a user already has a wallet connected,
