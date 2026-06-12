@@ -133,7 +133,9 @@ class PnlPanelGenerator {
   }
 
   async generatePanel(data, mode = 'win') {
-    const templateFile = path.join(this.templateDir, 'PNL v3 .png');
+    const templateFile = mode === 'loss'
+      ? path.join(this.templateDir, 'PNL v3 loss.png')
+      : path.join(this.templateDir, 'PNL v3 .png');
 
     const canvas = createCanvas(1920, 1080);
     const ctx = canvas.getContext('2d');
@@ -204,6 +206,7 @@ class PnlPanelGenerator {
     const formatEth = (value, signed = false) => {
       const num = Number(value) || 0;
       const sign = signed && num > 0 ? '+' : '';
+      if (num !== 0 && Math.abs(num) < 0.001) return `${sign}<0.001 ETH`;
       return `${sign}${num.toFixed(Math.abs(num) >= 10 ? 2 : 3)} ETH`;
     };
 
@@ -288,9 +291,11 @@ class PnlPanelGenerator {
       if (!count) {
         sub = '—';
       } else if (avgEth > 0.00001) {
-        sub = `${prefix}${avgEth.toFixed(3)} ETH`;
+        sub = avgEth < 0.001 ? `${prefix}<0.001 ETH` : `${prefix}${avgEth.toFixed(3)} ETH`;
       } else if (kind === 'holding') {
         sub = 'no floor data';
+      } else if (kind === 'minted') {
+        sub = 'gas only';
       } else {
         sub = `${prefix}0.000 ETH`; // free mint / unpriced
       }
@@ -317,7 +322,7 @@ class PnlPanelGenerator {
     });
     drawEthUsd(unrealizedProfit, 888, 615, {
       signed: true,
-      color: unrealizedProfit >= 0 ? COLORS.green : COLORS.red,
+      color: unrealizedProfit === 0 ? COLORS.gray : unrealizedProfit > 0 ? COLORS.green : COLORS.red,
       font: '30px "Space Grotesk"',
       subFont: '15px "Space Grotesk"'
     });
@@ -335,13 +340,17 @@ class PnlPanelGenerator {
 
     // 7. ROI — auto-scale font down for large percentages
     // For transferred/gifted NFTs (no cost), show N/A instead of +∞%
-    const isTransferred = (data.transferredCount || 0) > 0 && (data.totalBoughtEth || 0) === 0;
+    const spentEth = Number(data.totalBoughtEth) || 0;
+    const isTransferred = (data.transferredCount || 0) > 0 && spentEth === 0;
+    const isNearFree = spentEth > 0 && spentEth < 0.001;
     const roiText = isTransferred
       ? 'N/A'
+      : isNearFree
+        ? 'GAS ROI'
       : !isFinite(data.totalRoi)
         ? (data.totalRoi > 0 ? '+∞%' : '-∞%')
         : `${data.totalRoi >= 0 ? '+' : ''}${Math.round(data.totalRoi)}%`;
-    const roiColor = isTransferred ? COLORS.gray : profitColor;
+    const roiColor = (isTransferred || isNearFree) ? COLORS.gray : profitColor;
     const maxRoiWidth = 220;
     let roiFontSize = 58; // match TOTAL PROFIT/LOSS size
     ctx.font = `${roiFontSize}px "Space Grotesk"`;
