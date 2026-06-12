@@ -1272,7 +1272,7 @@ class DiscordBot {
     let totalBuyGas = 0;
     let totalSold = 0;
     let totalHolding = 0;
-    let totalBuyCost = 0;
+    let totalUnrealizedProfit = 0;
     let holdingCount = 0;
     let soldCount = 0;
 
@@ -1285,6 +1285,9 @@ class DiscordBot {
     let boughtCount = 0;
     let boughtPriceSum = 0;
     let soldPriceSum = 0;
+    let confidenceExact = 0;
+    let confidenceEstimated = 0;
+    let confidenceUnknown = 0;
 
     let transferredOutCount = 0;
     for (const r of results) {
@@ -1298,7 +1301,6 @@ class DiscordBot {
       totalBuyGas += r.buyExtraGas || 0;
       if (r.buyDetected && r.buyPrice > 0) {
         totalBought += r.buyPrice;
-        totalBuyCost += r.buyPrice;
       }
 
       // Classify acquisition method for the MINTED / BOUGHT slots.
@@ -1321,9 +1323,24 @@ class DiscordBot {
       } else {
         holdingCount++;
         if (r.currentFloor > 0.00001) totalHolding += r.currentFloor;
+        if (r.profit !== null) totalUnrealizedProfit += r.profit;
       }
       if (r.profit !== null) {
         totalProfit += r.profit;
+      }
+
+      const rowConfidence = [
+        r.buyConfidence || (r.buyDetected ? 'exact' : 'unknown'),
+        r.mode === 'sold'
+          ? (r.sellConfidence || (r.sellDetected ? 'exact' : 'unknown'))
+          : (r.floorConfidence || 'unknown')
+      ];
+      if (rowConfidence.includes('unknown')) {
+        confidenceUnknown++;
+      } else if (rowConfidence.includes('estimated')) {
+        confidenceEstimated++;
+      } else {
+        confidenceExact++;
       }
     }
 
@@ -1340,9 +1357,10 @@ class DiscordBot {
     // Count how many NFTs were transferred/gifted (no payment detected)
     const transferredCount = results.filter(r => r.buyLabel === 'TRANSFERRED').length;
 
-    // Free mints (totalBuyCost=0) with profit → Infinity ROI; panel generator handles display
-    const totalRoi = totalBuyCost > 0
-      ? (totalProfit / totalBuyCost * 100)
+    // If no spend is known, keep infinity/N/A behavior; otherwise ROI uses spend including buy gas.
+    const totalSpent = totalBought + totalBuyGas;
+    const totalRoi = totalSpent > 0
+      ? (totalProfit / totalSpent * 100)
       : (totalProfit > 0 ? Infinity : 0);
     const saleFeeRate = Math.max(
       0,
@@ -1351,7 +1369,7 @@ class DiscordBot {
         .map(r => Number(r.saleFeeRate) || 0)
     );
 
-    console.log(`[PnL] ${collection}: BOUGHT ${totalBought.toFixed(4)} + GAS ${totalBuyGas.toFixed(4)} = ${(totalBought + totalBuyGas).toFixed(4)} | SOLD ${totalSold.toFixed(4)} | HOLDING ${totalHolding.toFixed(4)} (${holdingCount}) | P&L ${totalProfit.toFixed(4)} ETH | ROI ${isFinite(totalRoi) ? totalRoi.toFixed(1) + '%' : '∞'} | ${transferredOutCount} moved out`);
+    console.log(`[PnL] ${collection}: BOUGHT ${totalBought.toFixed(4)} + GAS ${totalBuyGas.toFixed(4)} = ${totalSpent.toFixed(4)} | SOLD ${totalSold.toFixed(4)} | HOLDING ${totalHolding.toFixed(4)} (${holdingCount}) | UNREALIZED ${totalUnrealizedProfit.toFixed(4)} ETH | P&L ${totalProfit.toFixed(4)} ETH | ROI ${isFinite(totalRoi) ? totalRoi.toFixed(1) + '%' : '∞'} | ${transferredOutCount} moved out`);
 
     const generatedAt = new Date();
     const generatedDate = generatedAt.toLocaleDateString('en-GB', { timeZone: 'UTC' });
@@ -1364,10 +1382,11 @@ class DiscordBot {
     // Prepare data for image generator
     const panelData = {
       collection: collection.substring(0, 18),
-      totalBoughtEth: totalBought + totalBuyGas, // price paid + gas fees
+      totalBoughtEth: totalSpent, // price paid + buy gas
       totalSoldEth: totalSold,
       holdingCount: holdingCount,
       totalHoldingEth: totalHolding,
+      totalUnrealizedProfit,
       // ── 4-slot breakdown (MINTED · BOUGHT · SOLD · HOLDING): count + avg price ──
       mintedCount,
       mintedAvgEth,
@@ -1379,6 +1398,9 @@ class DiscordBot {
       totalProfit: totalProfit,
       totalRoi: totalRoi,
       saleFeeRate,
+      confidenceExact,
+      confidenceEstimated,
+      confidenceUnknown,
       transferredCount: transferredCount,  // NFTs received as gifts/transfers
       date: generatedDate,
       time: generatedTime,
@@ -1416,9 +1438,10 @@ class DiscordBot {
       const movedOutNote = transferredOutCount > 0
         ? `\n📦 ${transferredOutCount} NFT${transferredOutCount > 1 ? 's' : ''} moved out (no sale proceeds) — excluded from P&L`
         : '';
+      const confidenceNote = `\nData confidence: ${confidenceExact} exact, ${confidenceEstimated} estimated, ${confidenceUnknown} unknown`;
 
       await interaction.editReply({
-        content: `👁️ **Preview — ${collection} PnL**\n<@${interaction.user.id}> | NFTs: ${holdingCount + soldCount} (${holdingCount} holding, ${soldCount} sold)${movedOutNote}\n\nClick **Confirm** to post this to the PnL channel, or **Decline** to cancel.`,
+        content: `👁️ **Preview — ${collection} PnL**\n<@${interaction.user.id}> | NFTs: ${holdingCount + soldCount} (${holdingCount} holding, ${soldCount} sold)${movedOutNote}${confidenceNote}\n\nClick **Confirm** to post this to the PnL channel, or **Decline** to cancel.`,
         files: [{ attachment: imageBuffer, name: 'pnl_panel.png' }],
         embeds: [],
         components: [confirmRow]

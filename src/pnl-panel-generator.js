@@ -133,9 +133,7 @@ class PnlPanelGenerator {
   }
 
   async generatePanel(data, mode = 'win') {
-    const templateFile = mode === 'win'
-      ? path.join(this.templateDir, 'pnl-win-template-4slot.png')
-      : path.join(this.templateDir, 'pnl-loss-template-4slot.png');
+    const templateFile = path.join(this.templateDir, 'PNL v3 .png');
 
     const canvas = createCanvas(1920, 1080);
     const ctx = canvas.getContext('2d');
@@ -154,9 +152,7 @@ class PnlPanelGenerator {
 
     ctx.drawImage(template, 0, 0);
 
-    // Clean up baked template art: hide the empty left arc of the mascot's circular
-    // ring (both cards) and fade the loss mascot's lower body off the date panel.
-    this.cleanupTemplateArt(ctx, mode);
+    // PNL v3 already has clean mascot/ring artwork.
 
     const ethPrice = await this.getEthPrice();
     const hasEthPrice = Number.isFinite(ethPrice) && ethPrice > 0;
@@ -205,6 +201,30 @@ class PnlPanelGenerator {
       gold: '#c69c6c'
     };
 
+    const formatEth = (value, signed = false) => {
+      const num = Number(value) || 0;
+      const sign = signed && num > 0 ? '+' : '';
+      return `${sign}${num.toFixed(Math.abs(num) >= 10 ? 2 : 3)} ETH`;
+    };
+
+    const drawEthUsd = (ethValue, x, y, options = {}) => {
+      const {
+        signed = false,
+        color = COLORS.white,
+        font = '30px "Space Grotesk"',
+        subFont = '16px "Space Grotesk"',
+        subOffset = 30
+      } = options;
+      drawText(formatEth(ethValue, signed), x, y, { font, color, shadow: true });
+      if (hasEthPrice) {
+        const prefix = signed && ethValue > 0 ? '+' : ethValue < 0 ? '-' : '';
+        drawText(`${prefix}${this.formatUsd(Math.abs(ethValue), ethPrice)}`, x, y + subOffset, {
+          font: subFont,
+          color: COLORS.gray
+        });
+      }
+    };
+
     const saleFeeRate = Number(data.saleFeeRate) || 0;
     if (saleFeeRate > 0) {
       const feeText = `NET FLOOR INCLUDES ${(saleFeeRate * 100).toFixed(2)}% FORCED FEES`;
@@ -234,7 +254,7 @@ class PnlPanelGenerator {
       displayCollectionText += '…';
     }
     // x=67: pixel-scanned left edge of "COLLECTION" label in template — name aligns under it
-    drawText(displayCollectionText, 67, 270, {
+    drawText(displayCollectionText, 77, 247, {
       font: `${collectionFontSize}px "${ETHNOCENTRIC}"`,
       color: COLORS.white
     });
@@ -244,9 +264,9 @@ class PnlPanelGenerator {
     //   minted/bought → "avg <price> ETH"   sold → "avg <price> ETH"   holding → "floor <price> ETH"
     // X positions line up under the chips drawn in scripts/build-4slot-template.js
     // (FIRST_CHIP_X=48, SLOT_W=270). Value sits just inside each chip's left edge.
-    const SLOT_X = { minted: 52, bought: 322, sold: 592, holding: 862 };
-    const Y_COUNT = 527; // big count baseline
-    const Y_SUB = 562;   // avg / floor sub-line
+    const SLOT_X = { minted: 178, bought: 452, sold: 700, holding: 952 };
+    const Y_COUNT = 452;
+    const Y_SUB = 482;
 
     const drawSlot = (x, count, avgEth, kind) => {
       ctx.textAlign = 'left';
@@ -254,16 +274,16 @@ class PnlPanelGenerator {
 
       // Big NFT count
       const countStr = String(count || 0);
-      ctx.font = '40px "Space Grotesk"';
+      ctx.font = '34px "Space Grotesk"';
       ctx.fillStyle = COLORS.white;
       ctx.fillText(countStr, x, Y_COUNT);
       const countW = ctx.measureText(countStr).width;
-      ctx.font = '20px "Space Grotesk"';
+      ctx.font = '17px "Space Grotesk"';
       ctx.fillStyle = COLORS.gray;
       ctx.fillText(count === 1 ? ' NFT' : ' NFTs', x + countW, Y_COUNT);
 
       // Sub-line: avg price (minted/bought/sold) or floor (holding)
-      const prefix = kind === 'holding' ? 'floor ' : 'avg ';
+      const prefix = kind === 'holding' ? '' : 'avg ';
       let sub;
       if (!count) {
         sub = '—';
@@ -274,9 +294,9 @@ class PnlPanelGenerator {
       } else {
         sub = `${prefix}0.000 ETH`; // free mint / unpriced
       }
-      ctx.font = '17px "Space Grotesk"';
+      ctx.font = '15px "Space Grotesk"';
       ctx.fillStyle = COLORS.gray;
-      ctx.fillText(sub, x, Y_SUB);
+      ctx.fillText(sub, kind === 'holding' ? x + 52 : x, Y_SUB);
     };
 
     drawSlot(SLOT_X.minted, data.mintedCount || 0, data.mintedAvgEth || 0, 'minted');
@@ -284,15 +304,33 @@ class PnlPanelGenerator {
     drawSlot(SLOT_X.sold, data.soldCount || 0, data.soldAvgEth || 0, 'sold');
     drawSlot(SLOT_X.holding, data.holdingCount || 0, data.holdingFloorEth || 0, 'holding');
 
+    const unrealizedProfit = Number(data.totalUnrealizedProfit) || 0;
+    drawEthUsd(data.totalBoughtEth || 0, 183, 615, {
+      color: COLORS.white,
+      font: '30px "Space Grotesk"',
+      subFont: '15px "Space Grotesk"'
+    });
+    drawEthUsd(data.totalSoldEth || 0, 536, 615, {
+      color: COLORS.white,
+      font: '30px "Space Grotesk"',
+      subFont: '15px "Space Grotesk"'
+    });
+    drawEthUsd(unrealizedProfit, 888, 615, {
+      signed: true,
+      color: unrealizedProfit >= 0 ? COLORS.green : COLORS.red,
+      font: '30px "Space Grotesk"',
+      subFont: '15px "Space Grotesk"'
+    });
 
     // 6. Total P&L (bottom left, large)
     // NOTE: the template already has a "USD" badge baked in — do NOT draw it again.
     const profitColor = data.totalProfit >= 0 ? COLORS.green : COLORS.red;
-    const profitSign = data.totalProfit >= 0 ? '+' : '-';
-    const profitText = hasEthPrice ? `${profitSign}${this.formatUsd(Math.abs(data.totalProfit), ethPrice)}` : 'N/A';
-    drawText(profitText, 225, 787, {
-      font: '58px "Space Grotesk"',
-      color: profitColor
+    drawEthUsd(data.totalProfit || 0, 265, 805, {
+      signed: true,
+      color: profitColor,
+      font: '42px "Space Grotesk"',
+      subFont: '18px "Space Grotesk"',
+      subOffset: 36
     });
 
     // 7. ROI — auto-scale font down for large percentages
@@ -311,7 +349,7 @@ class PnlPanelGenerator {
       roiFontSize -= 4;
       ctx.font = `${roiFontSize}px "Space Grotesk"`;
     }
-    drawText(roiText, 950, 787, {
+    drawText(roiText, 932, 805, {
       font: `${roiFontSize}px "Space Grotesk"`,
       color: roiColor
     });
@@ -323,9 +361,9 @@ class PnlPanelGenerator {
     // apart) with thin dividers at y≈722/802. Place each value a uniform 28px below its
     // label so all three label/value pairs match and the value clears the divider below.
     const rightColX = 1430; // aligned with the label text left edge (x≈1432)
-    const dateY   = 693;
-    const timeY   = 773;
-    const traderY = 853;
+    const dateY   = 724;
+    const timeY   = 794;
+    const traderY = 864;
     const rightColFont = '22px "Space Grotesk"'; // unified size + weight for all three rows
 
     const generatedAt = new Date();

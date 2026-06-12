@@ -186,6 +186,25 @@ class NftApiClient {
     }
   }
 
+  async paginatedRequest(url, params = {}, itemKey, pageKeyName = 'pageKey', maxPages = 50) {
+    const items = [];
+    let pageKey = null;
+
+    for (let page = 0; page < maxPages; page++) {
+      const pageParams = pageKey ? { ...params, [pageKeyName]: pageKey } : { ...params };
+      const data = await this.request(url, pageParams);
+      if (!data) break;
+
+      const pageItems = Array.isArray(data[itemKey]) ? data[itemKey] : [];
+      items.push(...pageItems);
+
+      pageKey = data.pageKey || data.nextPageKey || null;
+      if (!pageKey) break;
+    }
+
+    return items;
+  }
+
   async rpcRequest(method, params = []) {
     try {
       const response = await axios.post(this.rpcBaseUrl, {
@@ -196,6 +215,28 @@ class NftApiClient {
       console.error(`Alchemy RPC error: ${error.response?.data?.error?.message || error.message}`);
       return null;
     }
+  }
+
+  async getAssetTransfersAll(baseParams, maxPages = 25) {
+    const transfers = [];
+    let pageKey = null;
+
+    for (let page = 0; page < maxPages; page++) {
+      const params = {
+        ...baseParams,
+        maxCount: baseParams.maxCount || '0x3e8'
+      };
+      if (pageKey) params.pageKey = pageKey;
+
+      const result = await this.rpcRequest('alchemy_getAssetTransfers', [params]);
+      if (!result || !Array.isArray(result.transfers)) break;
+
+      transfers.push(...result.transfers);
+      pageKey = result.pageKey || null;
+      if (!pageKey) break;
+    }
+
+    return transfers;
   }
 
   checkKey() {
@@ -349,6 +390,44 @@ class NftApiClient {
     return '';
   }
 
+  transferSortValue(transfer) {
+    const block = parseInt(transfer?.blockNum || '0x0', 16) || 0;
+    const unique = String(transfer?.uniqueId || transfer?.hash || '');
+    const logMatch = unique.match(/log:(\d+)/i);
+    const logIndex = logMatch ? Number(logMatch[1]) || 0 : 0;
+    return block * 100000 + logIndex;
+  }
+
+  sortTransfersAsc(transfers) {
+    return [...transfers].sort((a, b) => this.transferSortValue(a) - this.transferSortValue(b));
+  }
+
+  getTokenTransfers(transfers, tokenId) {
+    const tokenIdNorm = this.normalizeTokenId(tokenId);
+    return this.sortTransfersAsc((transfers || []).filter(t => this.transferMatchesToken(t, tokenIdNorm)));
+  }
+
+  pickOwnershipPeriod(incomingTransfers, outgoingTransfers) {
+    const incoming = this.sortTransfersAsc(incomingTransfers || []);
+    const outgoing = this.sortTransfersAsc(outgoingTransfers || []);
+    if (incoming.length === 0) return { incoming: null, outgoing: outgoing[outgoing.length - 1] || null };
+
+    const latestIncoming = incoming[incoming.length - 1];
+    const latestIncomingPos = this.transferSortValue(latestIncoming);
+    const outgoingAfterLatestIncoming = outgoing.find(t => this.transferSortValue(t) > latestIncomingPos);
+
+    if (!outgoingAfterLatestIncoming) {
+      return { incoming: latestIncoming, outgoing: null };
+    }
+
+    const outgoingPos = this.transferSortValue(outgoingAfterLatestIncoming);
+    const matchingIncoming = [...incoming]
+      .reverse()
+      .find(t => this.transferSortValue(t) < outgoingPos) || latestIncoming;
+
+    return { incoming: matchingIncoming, outgoing: outgoingAfterLatestIncoming };
+  }
+
   async getTxEthValue(txHash) {
     if (!txHash) return 0;
     try {
@@ -463,27 +542,24 @@ class NftApiClient {
   async detectBuyPrice(wallet, contract, tokenId) {
     const normalizedWallet = wallet.toLowerCase();
 
-    // Get NFT transfers for this token
-    const transfers = await this.rpcRequest('alchemy_getAssetTransfers', [{
+    const transfers = await this.getAssetTransfersAll({
       fromBlock: '0x0',
       toBlock: 'latest',
       toAddress: normalizedWallet,
       contractAddresses: [contract],
       category: ['erc721', 'erc1155'],
       withMetadata: true,
-      excludeZeroValue: false,
-      maxCount: '0x64'
-    }]);
+      excludeZeroValue: false
+    });
 
-    if (!transfers || !Array.isArray(transfers.transfers)) {
-      return { price: 0, label: 'BUY PRICE', detected: false };
+    if (!Array.isArray(transfers)) {
+      return { price: 0, label: 'BUY PRICE', detected: false, confidence: 'unknown' };
     }
 
-    const tokenIdNorm = this.normalizeTokenId(tokenId);
-    const incoming = transfers.transfers.find(t => this.transferMatchesToken(t, tokenIdNorm));
+    const incoming = this.getTokenTransfers(transfers, tokenId).slice(-1)[0];
 
     if (!incoming) {
-      return { price: 0, label: 'BUY PRICE', detected: false };
+      return { price: 0, label: 'BUY PRICE', detected: false, confidence: 'unknown' };
     }
 
     const isMint = incoming.from === '0x0000000000000000000000000000000000000000';
@@ -495,7 +571,12 @@ class NftApiClient {
     if (isMint) {
       // Divide by batch count (e.g. batch-minting multiple NFTs in one tx)
       const batchCount = await this.countNftsReceivedInTx(txHash, wallet, contract);
-      return { price: txValue / batchCount, label: 'MINT PRICE', detected: true };
+      return {
+        price: txValue / batchCount,
+        label: 'MINT PRICE',
+        detected: true,
+        confidence: batchCount > 1 ? 'estimated' : 'exact'
+      };
     }
 
     // For secondary buys: detect the price then split by batch count
@@ -529,7 +610,12 @@ class NftApiClient {
       const batchCount = await this.countNftsReceivedInTx(txHash, wallet, contract);
       const perNftPrice = rawPrice / batchCount;
       if (batchCount > 1) console.log(`[Buy] Batch of ${batchCount}: ${rawPrice.toFixed(4)} / ${batchCount} = ${perNftPrice.toFixed(4)} ETH`);
-      return { price: perNftPrice, label: 'BUY PRICE', detected: true };
+      return {
+        price: perNftPrice,
+        label: 'BUY PRICE',
+        detected: true,
+        confidence: batchCount > 1 ? 'estimated' : 'exact'
+      };
     }
 
     // No payment found — check if this was a P2P transfer/gift
@@ -537,11 +623,11 @@ class NftApiClient {
       .then(tx => tx?.from?.toLowerCase()).catch(() => null);
     if (txSender && txSender !== normalizedWallet) {
       console.log(`[Buy] NFT was transferred/gifted from ${txSender} — no payment on-chain`);
-      return { price: 0, label: 'TRANSFERRED', detected: true };
+      return { price: 0, label: 'TRANSFERRED', detected: true, confidence: 'unknown' };
     }
 
     console.log(`[Buy] Could not detect price for ${txHash}`);
-    return { price: 0, label: 'BUY PRICE', detected: false };
+    return { price: 0, label: 'BUY PRICE', detected: false, confidence: 'unknown' };
   }
 
   /**
@@ -551,26 +637,24 @@ class NftApiClient {
   async detectSellPrice(wallet, contract, tokenId) {
     const normalizedWallet = wallet.toLowerCase();
 
-    const transfers = await this.rpcRequest('alchemy_getAssetTransfers', [{
+    const transfers = await this.getAssetTransfersAll({
       fromBlock: '0x0',
       toBlock: 'latest',
       fromAddress: normalizedWallet,
       contractAddresses: [contract],
       category: ['erc721', 'erc1155'],
       withMetadata: true,
-      excludeZeroValue: false,
-      maxCount: '0x64'
-    }]);
+      excludeZeroValue: false
+    });
 
-    if (!transfers || !Array.isArray(transfers.transfers)) {
-      return { price: 0, detected: false };
+    if (!Array.isArray(transfers)) {
+      return { price: 0, detected: false, confidence: 'unknown' };
     }
 
-    const tokenIdNorm = this.normalizeTokenId(tokenId);
-    const outgoing = transfers.transfers.find(t => this.transferMatchesToken(t, tokenIdNorm));
+    const outgoing = this.getTokenTransfers(transfers, tokenId).slice(-1)[0];
 
     if (!outgoing) {
-      return { price: 0, detected: false };
+      return { price: 0, detected: false, confidence: 'unknown' };
     }
 
     // Net proceeds the seller actually RECEIVED (ETH + WETH/Blur pool), after
@@ -584,10 +668,10 @@ class NftApiClient {
       const batchCount = await this.countNftsInTx(outgoing.hash, wallet, contract, 'from');
       const perNftPrice = rawPrice / batchCount;
       if (batchCount > 1) console.log(`[Sell] Batch of ${batchCount}: ${rawPrice.toFixed(4)} / ${batchCount} = ${perNftPrice.toFixed(4)} ETH`);
-      return { price: perNftPrice, detected: true };
+      return { price: perNftPrice, detected: true, confidence: batchCount > 1 ? 'estimated' : 'exact' };
     }
 
-    return { price: 0, detected: false };
+    return { price: 0, detected: false, confidence: 'unknown' };
   }
 
   async getRecentOwnedNfts(wallet, limit = 3) {
@@ -631,21 +715,20 @@ class NftApiClient {
 
     const normalizedWallet = wallet.toLowerCase();
 
-    const outgoing = await this.rpcRequest('alchemy_getAssetTransfers', [{
+    const outgoingTransfers = await this.getAssetTransfersAll({
       fromBlock: '0x0',
       toBlock: 'latest',
       fromAddress: normalizedWallet,
       category: ['erc721', 'erc1155'],
       withMetadata: true,
-      excludeZeroValue: false,
-      maxCount: '0x64'
-    }]);
+      excludeZeroValue: false
+    }, 5);
 
-    if (!outgoing || !Array.isArray(outgoing.transfers) || outgoing.transfers.length === 0) {
+    if (!Array.isArray(outgoingTransfers) || outgoingTransfers.length === 0) {
       return { nfts: [] };
     }
 
-    const sorted = outgoing.transfers
+    const sorted = outgoingTransfers
       .sort((a, b) => parseInt(b.blockNum, 16) - parseInt(a.blockNum, 16));
 
     const seen = new Set();
@@ -872,30 +955,52 @@ class NftApiClient {
    * Returns 0 only if no source has data.
    */
   async getCollectionFloorPrice(contract) {
-    if (!this.hasKey) return 0;
+    const detail = await this.getCollectionFloorPriceDetails(contract);
+    return detail.floor;
+  }
+
+  async getCollectionFloorPriceDetails(contract) {
+    if (!this.hasKey) return { floor: 0, source: 'none', confidence: 'unknown' };
 
     const overrideFloor = this.floorOverrides.get(contract.toLowerCase());
     if (overrideFloor > 0) {
       console.log(`[Floor] Manual override: ${overrideFloor.toFixed(4)} ETH`);
-      this.floorCache.set(contract.toLowerCase(), { floor: overrideFloor, ts: Date.now() });
-      return overrideFloor;
+      const detail = { floor: overrideFloor, source: 'manual override', confidence: 'exact' };
+      this.floorCache.set(contract.toLowerCase(), { ...detail, ts: Date.now() });
+      return detail;
     }
 
     // Serve from cache if fresh
     const cached = this.floorCache.get(contract.toLowerCase());
-    if (cached && Date.now() - cached.ts < this.floorCacheTtl) return cached.floor;
+    if (cached && Date.now() - cached.ts < this.floorCacheTtl) {
+      return {
+        floor: cached.floor || 0,
+        source: cached.source || 'cache',
+        confidence: cached.confidence || 'estimated'
+      };
+    }
 
     let floor = 0;
+    let source = 'none';
+    let confidence = 'unknown';
 
     // 1. Alchemy paid API floor/metadata
     try {
       floor = await this.getAlchemyFloor(contract);
+      if (floor > 0) {
+        source = 'Alchemy';
+        confidence = 'estimated';
+      }
     } catch (e) { /* fall through */ }
 
     // 2. Reservoir public API (no OpenSea key required)
     if (floor <= 0) {
       try {
         floor = await this.getReservoirFloor(contract);
+        if (floor > 0) {
+          source = 'Reservoir';
+          confidence = 'estimated';
+        }
       } catch (e) { /* fall through */ }
     }
 
@@ -903,16 +1008,25 @@ class NftApiClient {
     if (floor <= 0) {
       try {
         floor = await this.getOpenSeaFloor(contract);
+        if (floor > 0) {
+          source = 'OpenSea';
+          confidence = 'estimated';
+        }
       } catch (e) { /* fall through */ }
     }
 
     // 4. Recent-sales estimate
     if (floor <= 0) {
       floor = await this.estimateFloorFromSales(contract);
+      if (floor > 0) {
+        source = 'recent sales';
+        confidence = 'estimated';
+      }
     }
 
-    this.floorCache.set(contract.toLowerCase(), { floor, ts: Date.now() });
-    return floor;
+    const detail = { floor, source, confidence };
+    this.floorCache.set(contract.toLowerCase(), { ...detail, ts: Date.now() });
+    return detail;
   }
 
   /**
@@ -1000,35 +1114,31 @@ class NftApiClient {
   async getNftFullHistory(wallet, contract, tokenId) {
     const normalizedWallet = wallet.toLowerCase();
 
-    // Incoming transfer (buy/mint)
-    const incomingTransfers = await this.rpcRequest('alchemy_getAssetTransfers', [{
+    const allIncoming = await this.getAssetTransfersAll({
       fromBlock: '0x0', toBlock: 'latest',
       toAddress: normalizedWallet,
       contractAddresses: [contract],
       category: ['erc721', 'erc1155'],
-      withMetadata: true, excludeZeroValue: false, maxCount: '0x64'
-    }]);
+      withMetadata: true, excludeZeroValue: false
+    });
 
-    const tokenIdNorm = this.normalizeTokenId(tokenId);
-    const incoming = incomingTransfers?.transfers?.find(
-      t => this.transferMatchesToken(t, tokenIdNorm)
-    );
-
-    // Outgoing transfer (sell)
-    const outgoingTransfers = await this.rpcRequest('alchemy_getAssetTransfers', [{
+    const allOutgoing = await this.getAssetTransfersAll({
       fromBlock: '0x0', toBlock: 'latest',
       fromAddress: normalizedWallet,
       contractAddresses: [contract],
       category: ['erc721', 'erc1155'],
-      withMetadata: true, excludeZeroValue: false, maxCount: '0x64'
-    }]);
+      withMetadata: true, excludeZeroValue: false
+    });
 
-    const outgoing = outgoingTransfers?.transfers?.find(
-      t => this.transferMatchesToken(t, tokenIdNorm)
-    );
+    const incomingTransfers = this.getTokenTransfers(allIncoming, tokenId);
+    const outgoingTransfers = this.getTokenTransfers(allOutgoing, tokenId);
+    const period = this.pickOwnershipPeriod(incomingTransfers, outgoingTransfers);
+    const incoming = period.incoming;
+    const outgoing = period.outgoing;
 
     // Detect buy price
     let buyPrice = 0, buyDetected = false, buyLabel = 'BUY PRICE';
+    let buyConfidence = 'unknown';
     let buyTxHash = null, buyTime = null;
     const PROTOCOL_FEE_THRESHOLD = 0.005;
 
@@ -1064,6 +1174,7 @@ class NftApiClient {
         const batchCount = await this.countNftsReceivedInTx(incoming.hash, normalizedWallet, contract);
         buyPrice = rawBuyPrice / batchCount;
         buyDetected = true;
+        buyConfidence = batchCount > 1 ? 'estimated' : 'exact';
         if (batchCount > 1) console.log(`[History] Batch ${batchCount}: ${rawBuyPrice.toFixed(4)}/${batchCount}=${buyPrice.toFixed(4)} ETH`);
       } else if (!isMint) {
         // Check if P2P transfer/gift
@@ -1071,14 +1182,17 @@ class NftApiClient {
           .then(t => t?.from?.toLowerCase()).catch(() => null);
         if (txSender && txSender !== normalizedWallet) {
           buyLabel = 'TRANSFERRED'; buyDetected = true;
+          buyConfidence = 'unknown';
         }
       } else {
         buyDetected = true; // free mint, price = 0
+        buyConfidence = 'exact';
       }
     }
 
     // Detect sell price
     let sellPrice = 0, sellDetected = false;
+    let sellConfidence = 'unknown';
     let sellTxHash = null, sellTime = null;
 
     if (outgoing) {
@@ -1093,13 +1207,14 @@ class NftApiClient {
         const batchCount = await this.countNftsInTx(outgoing.hash, wallet, contract, 'from');
         sellPrice = rawSellPrice / batchCount;
         sellDetected = true;
+        sellConfidence = batchCount > 1 ? 'estimated' : 'exact';
         if (batchCount > 1) console.log(`[History] Sell batch ${batchCount}: ${rawSellPrice.toFixed(4)}/${batchCount}=${sellPrice.toFixed(4)} ETH`);
       }
     }
 
     return {
-      buy: { price: buyPrice, detected: buyDetected, label: buyLabel, txHash: buyTxHash, timestamp: buyTime },
-      sell: { price: sellPrice, detected: sellDetected, txHash: sellTxHash, timestamp: sellTime }
+      buy: { price: buyPrice, detected: buyDetected, label: buyLabel, txHash: buyTxHash, timestamp: buyTime, confidence: buyConfidence },
+      sell: { price: sellPrice, detected: sellDetected, txHash: sellTxHash, timestamp: sellTime, confidence: sellConfidence }
     };
   }
 
@@ -1109,18 +1224,17 @@ class NftApiClient {
   async getRecentSoldNftsForCollection(wallet, contract) {
     const normalizedWallet = wallet.toLowerCase();
 
-    const outgoing = await this.rpcRequest('alchemy_getAssetTransfers', [{
+    const outgoing = await this.getAssetTransfersAll({
       fromBlock: '0x0', toBlock: 'latest',
       fromAddress: normalizedWallet,
       contractAddresses: [contract],
       category: ['erc721', 'erc1155'],
-      withMetadata: true, excludeZeroValue: false,
-      maxCount: '0x64'
-    }]);
+      withMetadata: true, excludeZeroValue: false
+    });
 
-    if (!outgoing || !Array.isArray(outgoing.transfers)) return [];
+    if (!Array.isArray(outgoing)) return [];
 
-    const sorted = outgoing.transfers.sort((a, b) => parseInt(b.blockNum, 16) - parseInt(a.blockNum, 16));
+    const sorted = outgoing.sort((a, b) => parseInt(b.blockNum, 16) - parseInt(a.blockNum, 16));
     const seen = new Set();
     const unique = [];
     for (const t of sorted) {
@@ -1132,7 +1246,7 @@ class NftApiClient {
     }
 
     const nfts = [];
-    for (const t of unique.slice(0, 20)) {
+    for (const t of unique) {
       const realTokenId = this.getTransferTokenId(t);
       const meta = await this.request(`${this.nftBaseUrl}/getNFTMetadata`, {
         contractAddress: contract,
@@ -1210,33 +1324,40 @@ class NftApiClient {
     }
     console.log(`[PnL] ✓ Contract valid: ${validation.name || '(unnamed)'} (${validation.tokenType})`);
 
-    // Get owned NFTs from this collection
-    const ownedData = await this.request(`${this.nftBaseUrl}/getNFTsForOwner`, {
+    // Get owned NFTs from this collection. Paginate so older/large wallets are not capped at 100.
+    const ownedNfts = await this.paginatedRequest(`${this.nftBaseUrl}/getNFTsForOwner`, {
       owner: wallet,
       contractAddresses: [contract],
       withMetadata: true,
       pageSize: 100
-    });
-    console.log(`[PnL] Held in wallet: ${ownedData?.ownedNfts?.length || 0}`);
+    }, 'ownedNfts', 'pageKey', 50);
+    console.log(`[PnL] Held in wallet: ${ownedNfts.length || 0}`);
 
     // Get sold NFTs from this collection
     const soldNfts = await this.getRecentSoldNftsForCollection(wallet, contract);
     console.log(`[PnL] Outgoing (sold/transferred) found: ${soldNfts.length}`);
 
     // Fetch live floor price once for the whole collection
-    let liveFloorPrice = await this.getCollectionFloorPrice(contract);
+    let floorDetail = await this.getCollectionFloorPriceDetails(contract);
+    let liveFloorPrice = floorDetail.floor;
+    let floorSource = floorDetail.source;
+    let floorConfidence = floorDetail.confidence;
     if (liveFloorPrice <= 0 && validation.floorPrice > 0) {
       liveFloorPrice = validation.floorPrice;
-      this.floorCache.set(contract.toLowerCase(), { floor: liveFloorPrice, ts: Date.now() });
+      floorSource = 'Alchemy metadata';
+      floorConfidence = 'estimated';
+      this.floorCache.set(contract.toLowerCase(), { floor: liveFloorPrice, source: floorSource, confidence: floorConfidence, ts: Date.now() });
       console.log(`[Floor] Alchemy validation metadata floor fallback: ${liveFloorPrice.toFixed(4)} ETH`);
     }
     if (liveFloorPrice <= 0) {
-      const metadataFloors = (ownedData?.ownedNfts || [])
+      const metadataFloors = ownedNfts
         .map(nft => Number(nft.contract?.openSeaMetadata?.floorPrice) || 0)
         .filter(floor => floor > 0.00001);
       if (metadataFloors.length > 0) {
         liveFloorPrice = Math.min(...metadataFloors);
-        this.floorCache.set(contract.toLowerCase(), { floor: liveFloorPrice, ts: Date.now() });
+        floorSource = 'owned NFT metadata';
+        floorConfidence = 'estimated';
+        this.floorCache.set(contract.toLowerCase(), { floor: liveFloorPrice, source: floorSource, confidence: floorConfidence, ts: Date.now() });
         console.log(`[Floor] Alchemy metadata floor fallback: ${liveFloorPrice.toFixed(4)} ETH`);
       }
     }
@@ -1255,7 +1376,7 @@ class NftApiClient {
     const seenTokenIds = new Set();
 
     // Process owned NFTs
-    for (const nft of ownedData?.ownedNfts || []) {
+    for (const nft of ownedNfts) {
       const normId = this.normalizeTokenId(nft.tokenId);
       if (seenTokenIds.has(normId)) continue;
       seenTokenIds.add(normId);
@@ -1296,8 +1417,12 @@ class NftApiClient {
         currentFloor: floorPrice,
         grossFloor: liveFloorPrice,
         saleFeeRate,
+        floorSource,
+        floorConfidence,
         gasFees: cost.gasFees,
         buyExtraGas: cost.extraGas, // 0 for free mints (gas is already in buyPrice); >0 for paid buys
+        buyConfidence: history.buy.confidence || (history.buy.detected ? 'exact' : 'unknown'),
+        sellConfidence: 'exact',
         holdTime: this.formatHoldTime(history.buy.timestamp, null),
         profit,
         profitPercent
@@ -1346,8 +1471,12 @@ class NftApiClient {
         sellTxHash: history.sell.txHash,
         sellTime: history.sell.timestamp,
         currentFloor: 0,
+        floorSource: null,
+        floorConfidence: 'exact',
         gasFees: totalGas,
         buyExtraGas: cost.extraGas, // 0 for free mints; >0 for paid buys
+        buyConfidence: history.buy.confidence || (history.buy.detected ? 'exact' : 'unknown'),
+        sellConfidence: history.sell.confidence || (history.sell.detected ? 'exact' : 'unknown'),
         holdTime: this.formatHoldTime(history.buy.timestamp, history.sell.timestamp),
         profit,
         profitPercent
