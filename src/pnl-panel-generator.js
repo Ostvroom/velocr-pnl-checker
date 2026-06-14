@@ -353,15 +353,12 @@ class PnlPanelGenerator {
     // For transferred/gifted NFTs (no cost), show N/A instead of +∞%
     const spentEth = Number(data.totalBoughtEth) || 0;
     const isTransferred = (data.transferredCount || 0) > 0 && spentEth === 0;
-    const isNearFree = spentEth > 0 && spentEth < 0.001;
     const roiText = isTransferred
       ? 'N/A'
-      : isNearFree
-        ? 'GAS ROI'
       : !isFinite(data.totalRoi)
         ? (data.totalRoi > 0 ? '+∞%' : '-∞%')
         : `${data.totalRoi >= 0 ? '+' : ''}${Math.round(data.totalRoi)}%`;
-    const roiColor = (isTransferred || isNearFree) ? COLORS.gray : profitColor;
+    const roiColor = isTransferred ? COLORS.gray : profitColor;
     const maxRoiWidth = 220;
     let roiFontSize = 58; // match TOTAL PROFIT/LOSS size
     ctx.font = `${roiFontSize}px "Space Grotesk"`;
