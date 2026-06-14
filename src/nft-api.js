@@ -562,7 +562,9 @@ class NftApiClient {
       return { price: 0, label: 'BUY PRICE', detected: false, confidence: 'unknown' };
     }
 
-    const isMint = incoming.from === '0x0000000000000000000000000000000000000000';
+    // isMint: standard mint from 0x0, or contract self-mint (NFT contract transfers from itself)
+    const isMint = incoming.from === '0x0000000000000000000000000000000000000000'
+      || incoming.from?.toLowerCase() === contract.toLowerCase();
     const txHash = incoming.hash;
 
     const txValue = await this.getTxEthValue(txHash);
@@ -618,12 +620,20 @@ class NftApiClient {
       };
     }
 
-    // No payment found — check if this was a P2P transfer/gift
+    // No payment found — check if this was a P2P transfer/gift or a contract mint.
+    // P2P gift: incoming.from === txSender (Alice held the NFT and sent it to Bob directly)
+    // Contract/claim mint: incoming.from !== txSender (a contract routed the NFT; user didn't hold it before)
     const txSender = await this.rpcRequest('eth_getTransactionByHash', [txHash])
       .then(tx => tx?.from?.toLowerCase()).catch(() => null);
     if (txSender && txSender !== normalizedWallet) {
-      console.log(`[Buy] NFT was transferred/gifted from ${txSender} — no payment on-chain`);
-      return { price: 0, label: 'TRANSFERRED', detected: true, confidence: 'unknown' };
+      const fromAddr = incoming.from?.toLowerCase();
+      if (fromAddr && fromAddr === txSender) {
+        console.log(`[Buy] NFT was transferred/gifted from ${txSender} — no payment on-chain`);
+        return { price: 0, label: 'TRANSFERRED', detected: true, confidence: 'unknown' };
+      } else {
+        console.log(`[Buy] NFT received via contract mint/claim from ${fromAddr} (tx by ${txSender})`);
+        return { price: 0, label: 'MINT PRICE', detected: true, confidence: 'exact' };
+      }
     }
 
     console.log(`[Buy] Could not detect price for ${txHash}`);
@@ -1145,7 +1155,9 @@ class NftApiClient {
     if (incoming) {
       buyTxHash = incoming.hash;
       buyTime = incoming.metadata?.blockTimestamp;
-      const isMint = incoming.from === '0x0000000000000000000000000000000000000000';
+      // isMint: either standard mint from 0x0, or contract self-mint (NFT contract transfers from itself)
+      const isMint = incoming.from === '0x0000000000000000000000000000000000000000'
+        || incoming.from?.toLowerCase() === contract.toLowerCase();
       buyLabel = isMint ? 'MINT PRICE' : 'BUY PRICE';
 
       const txValue = await this.getTxEthValue(incoming.hash);
@@ -1177,12 +1189,21 @@ class NftApiClient {
         buyConfidence = batchCount > 1 ? 'estimated' : 'exact';
         if (batchCount > 1) console.log(`[History] Batch ${batchCount}: ${rawBuyPrice.toFixed(4)}/${batchCount}=${buyPrice.toFixed(4)} ETH`);
       } else if (!isMint) {
-        // Check if P2P transfer/gift
+        // Check if P2P transfer/gift. Also check if a minting contract (txSender != wallet)
+        // sent the NFT on behalf of the user — that's a claim/lazy mint, not a gift.
         const txSender = await this.rpcRequest('eth_getTransactionByHash', [incoming.hash])
           .then(t => t?.from?.toLowerCase()).catch(() => null);
         if (txSender && txSender !== normalizedWallet) {
-          buyLabel = 'TRANSFERRED'; buyDetected = true;
-          buyConfidence = 'unknown';
+          // P2P gift: NFT source (incoming.from) === tx sender (Alice gave it to Bob)
+          // Contract mint: NFT source !== tx sender (a contract routed the NFT)
+          const fromAddr = incoming.from?.toLowerCase();
+          if (fromAddr && fromAddr === txSender) {
+            buyLabel = 'TRANSFERRED'; buyDetected = true;
+            buyConfidence = 'unknown';
+          } else {
+            buyLabel = 'MINT PRICE'; buyDetected = true;
+            buyConfidence = 'exact';
+          }
         }
       } else {
         buyDetected = true; // free mint, price = 0
