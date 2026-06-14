@@ -301,7 +301,18 @@ class PnlPanelGenerator {
       }
       ctx.font = '15px "Space Grotesk"';
       ctx.fillStyle = COLORS.gray;
-      ctx.fillText(sub, kind === 'holding' ? x + 52 : x, Y_SUB);
+      if (kind === 'holding') {
+        // The v3 templates have a baked "floor" label. Replace that small strip
+        // with nearby clean background, then draw the whole subline consistently.
+        const leftWipe = { x: x - 18, y: Y_SUB - 24, w: 18, h: 22 };
+        ctx.drawImage(canvas, leftWipe.x, Y_SUB + 12, leftWipe.w, leftWipe.h, leftWipe.x, leftWipe.y, leftWipe.w, leftWipe.h);
+        const wipe = { x: x - 18, y: Y_SUB - 16, w: 185, h: 30 };
+        ctx.drawImage(canvas, wipe.x, Y_SUB + 10, wipe.w, wipe.h, wipe.x, wipe.y, wipe.w, wipe.h);
+        ctx.fillText('floor', x, Y_SUB);
+        ctx.fillText(sub, x + ctx.measureText('floor').width + 8, Y_SUB);
+      } else {
+        ctx.fillText(sub, x, Y_SUB);
+      }
     };
 
     drawSlot(SLOT_X.minted, data.mintedCount || 0, data.mintedAvgEth || 0, 'minted');
