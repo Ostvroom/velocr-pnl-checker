@@ -20,7 +20,6 @@ class NftApiClient {
     this.saleFeeCache = new Map();     // contract -> { rate, samples, ts }
     this.floorCacheTtl = 5 * 60 * 1000; // 5 min
     this.floorOverrides = this.parseFloorOverrides(process.env.FLOOR_PRICE_OVERRIDES);
-    this.floorOverrides.set('0x73c436aaba15d5495cccf31eb1ea965b9dbd3a81', 0.1799);
     this._loadOpenSeaKey();
   }
 

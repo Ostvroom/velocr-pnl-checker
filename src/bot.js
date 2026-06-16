@@ -26,7 +26,11 @@ class DiscordBot {
     this.nftApi = new NftApiClient(config.alchemy?.apiKey);
     this.commands = new Collection();
     this.userWallets = new Map(); // userId -> wallet address
-    this.walletsFile = path.join(__dirname, '..', 'data', 'user-wallets.json');
+    // Storage dir is configurable so it can point at a persistent disk on hosts
+    // with an ephemeral filesystem (e.g. Render). Set DATA_DIR=/var/data (or your
+    // mounted disk path) to keep wallets across restarts/redeploys.
+    const dataDir = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+    this.walletsFile = path.join(dataDir, 'user-wallets.json');
     this.pendingPnls = new Map(); // userId -> { buffer, filename, collection, wallet, results }
     this.loadWallets();
 
