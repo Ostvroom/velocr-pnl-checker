@@ -13,6 +13,13 @@ class PnlPanelGenerator {
     this.lastPriceFetch = 0;
   }
 
+  sanitizeFilenamePart(value) {
+    return String(value || 'collection')
+      .normalize('NFKC')
+      .replace(/[^\p{L}\p{N}]+/gu, '_')
+      .replace(/^_+|_+$/g, '') || 'collection';
+  }
+
   async getEthPrice() {
     // Cache for 5 minutes
     if (Date.now() - this.lastPriceFetch < 300000 && this.ethPriceUsd > 0) {
@@ -407,8 +414,10 @@ class PnlPanelGenerator {
 
     // Save and return
     const buffer = canvas.toBuffer('image/png');
-    const filename = `pnl_panel_${data.collection.replace(/\s+/g, '_')}_${Date.now()}.png`;
+    const collectionName = this.sanitizeFilenamePart(data.collection);
+    const filename = `pnl_panel_${collectionName}_${Date.now()}.png`;
     const filePath = path.join(this.outputDir, filename);
+    await fs.mkdir(this.outputDir, { recursive: true });
     await fs.writeFile(filePath, buffer);
     console.log(`PnL panel saved: ${filePath}`);
     return buffer;
