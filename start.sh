@@ -12,4 +12,21 @@ echo "── Installed custom fonts ──"
 fc-list | grep -iE "chakra|rajdhani" || echo "(fontconfig did not list them — relying on registerFont)"
 echo "────────────────────────────"
 
+# Optional second bot (LOOTERS autoplayer) piggybacking on this worker — see
+# looters/README.md. Only starts if LOOTER_COOKIE is set, so it's a no-op
+# until that env var is added in Render. Runs in the background with its own
+# auto-respawn loop; a crash here never affects the main Discord bot below.
+if [ -n "$LOOTER_COOKIE" ]; then
+  (
+    while true; do
+      node looters/src/bot.mjs
+      echo "[looters] exited, restarting in 5s…" >&2
+      sleep 5
+    done
+  ) &
+  echo "── Started looters autoplayer (background) ──"
+else
+  echo "── LOOTER_COOKIE not set — skipping looters autoplayer ──"
+fi
+
 node src/bot.js
